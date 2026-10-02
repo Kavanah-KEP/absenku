@@ -27,7 +27,8 @@
     getSettingsAdmin: 120, listAkun: 60
   };
   // Data sangat sensitif: hanya di memori (tidak ditulis ke penyimpanan perangkat)
-  const MEMORY_ONLY = { mySlip: 1, listGaji: 1, listBPJS: 1 };
+  // (slip milik sendiri boleh tersimpan di perangkat pemiliknya; dihapus saat Keluar)
+  const MEMORY_ONLY = { listGaji: 1, listBPJS: 1 };
   // Action yang bukan baca-cache tetapi juga tidak mengubah data → tidak meng-invalidate apa pun
   const NEUTRAL = { poll: 1, ping: 1, login: 1, batch: 1, getFotoAbsen: 1, getLampiran: 1, previewSlip: 1, previewSP: 1, laporanData: 1, getPublicInfo: 1, getBerita: 1, getBeritaDetail: 1 };
   // Aksi tulis → cache yang perlu dihapus (default: semua)
@@ -43,8 +44,26 @@
     submitAbsen: ['myAbsensi', 'listAbsensi', 'dashHRD', 'myKPI', 'listKPI', 'dashSuperadmin'],
     approveIzin: ['listIzin', 'dashHRD', 'dashSuperadmin', 'listKPI'],
     submitIzin: ['myIzin', 'listIzin', 'dashKaryawan', 'dashHRD', 'dashSuperadmin'],
-    cancelIzin: ['myIzin', 'listIzin', 'dashKaryawan', 'dashHRD', 'dashSuperadmin']
+    cancelIzin: ['myIzin', 'listIzin', 'dashKaryawan', 'dashHRD', 'dashSuperadmin'],
+    saveKaryawan: ['listKaryawan', 'listBPJS', 'listKPI', 'dashHRD', 'chatThreads', 'listAkun', 'dashSuperadmin', 'me'],
+    deleteKaryawan: ['listKaryawan', 'listBPJS', 'listKPI', 'dashHRD', 'chatThreads', 'listAkun', 'dashSuperadmin'],
+    resetPassword: [],
+    saveBPJS: ['listBPJS'],
+    saveGaji: ['listGaji', 'mySlip', 'dashKaryawan'],
+    deleteGaji: ['listGaji', 'mySlip', 'dashKaryawan'],
+    createSP: ['listSP', 'mySP', 'dashHRD', 'dashKaryawan'],
+    saveBerita: ['listBeritaAdmin'],
+    deleteBerita: ['listBeritaAdmin'],
+    saveSettings: ['getSettingsAdmin', 'getAbsenToday', 'dashKaryawan', 'myKPI', 'listKPI', 'dashHRD'],
+    uploadLogo: ['getSettingsAdmin'],
+    saveLokasi: ['getSettingsAdmin', 'getAbsenToday'],
+    deleteLokasi: ['getSettingsAdmin', 'getAbsenToday'],
+    saveAkun: ['listAkun', 'listKaryawan', 'dashSuperadmin', 'listKPI', 'listBPJS', 'chatThreads'],
+    setStatusAkun: ['listAkun', 'listKaryawan', 'dashSuperadmin'],
+    deleteAkun: ['listAkun', 'listKaryawan', 'dashSuperadmin', 'listKPI', 'listBPJS', 'dashHRD', 'chatThreads']
   };
+  // Action yang aman diulang otomatis bila server Apps Script sedang gangguan sesaat
+  const RETRY_SAFE = Object.assign({ login: 1, batch: 1, poll: 1, ping: 1, me: 1, getFotoAbsen: 1, getLampiran: 1, previewSlip: 1, previewSP: 1, laporanData: 1 }, READ);
 
   const mem = new Map();          // key → { d, t }
   const inflight = {};            // key → Promise<out>
@@ -107,25 +126,58 @@
     }
   }
 
-  /** Kirim satu request POST ke GAS. Mengembalikan objek respons lengkap {success,data,message}. */
-  async function send(action, data, opts) {
-    opts = opts || {};
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  /** Gangguan sesaat khas Apps Script (server bangun, error HTML tanpa CORS, sibuk) → layak dicoba ulang. */
+  function transient(err) { return !!err && (err.transient || err.code === 'BUSY'); }
+
+  /** Satu kali percobaan POST ke GAS. */
+  async function sendOnce(action, data, opts, token) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), opts.timeout || 90000);
+    const timer = setTimeout(() => ctrl.abort(), opts.timeout || (action === 'login' ? 30000 : 60000));
     let res;
     try {
       res = await fetch(url(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: action, token: API.token(), data: data || {} }),
+        body: JSON.stringify({ action: action, token: token, data: data || {} }),
         signal: ctrl.signal, redirect: 'follow'
       });
     } catch (e) {
-      throw new Error(e.name === 'AbortError' ? 'Waktu permintaan habis. Periksa koneksi internet Anda.' : 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+      throw Object.assign(new Error(e.name === 'AbortError' ? 'Server terlalu lama merespons. Periksa koneksi internet Anda.' : 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.'),
+        { transient: true, network: true });
     } finally { clearTimeout(timer); }
-    const out = await parse(res);
+    if (res.status >= 500) throw Object.assign(new Error('Server sedang sibuk. Mencoba lagi…'), { transient: true });
+    try { return await parse(res); } catch (e) { e.transient = true; throw e; }
+  }
+
+  /**
+   * Kirim request dengan coba ulang otomatis (maks 3x, jeda 0,8 s → 2 s) untuk gangguan sesaat.
+   * Aksi tulis hanya diulang bila server jelas belum memprosesnya (balasan error server, bukan putus koneksi).
+   */
+  async function send(action, data, opts) {
+    opts = opts || {};
+    const token = API.token();                 // token yang dipakai request ini
+    const safe = !!RETRY_SAFE[action];
+    const maxTry = opts.retry !== undefined ? opts.retry + 1 : (action === 'login' ? 4 : 3);
+    let out, lastErr;
+    for (let i = 0; i < maxTry; i++) {
+      try {
+        out = await sendOnce(action, data, opts, token);
+        if (!out.success && out.code === 'BUSY' && i < maxTry - 1) { await sleep(900 * (i + 1)); continue; }
+        lastErr = null; break;
+      } catch (e) {
+        lastErr = e;
+        const bolehUlang = transient(e) && (safe || !e.network);
+        if (!bolehUlang || i === maxTry - 1) break;
+        if (opts.onRetry) opts.onRetry(i + 1);
+        await sleep([800, 2000, 3500][i] || 3500);
+      }
+    }
+    if (lastErr) throw lastErr;
     if (!out.success) {
-      if (out.code === 'AUTH' && action !== 'login') {
+      // Sesi berakhir: hanya keluarkan pengguna bila token yang ditolak = token yang sedang aktif.
+      // (Mencegah balasan request lama menendang sesi baru tepat setelah login ulang.)
+      if (out.code === 'AUTH' && action !== 'login' && token && token === API.token()) {
         API.clear();
         if (window.App) window.App.onSessionExpired(out.message);
       }
@@ -229,7 +281,10 @@
         return opts.full ? out : out.data;
       }
       const out = await send(action, data, opts);
-      if (!NEUTRAL[action]) invalidate(INVALIDATE[action] || 'all');
+      if (!NEUTRAL[action]) {
+        invalidate(INVALIDATE[action] || 'all');
+        if (API.onWrite) setTimeout(() => API.onWrite(action), 50);   // isi ulang cache di latar belakang
+      }
       return opts.full ? out : out.data;
     },
 

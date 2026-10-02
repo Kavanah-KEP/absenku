@@ -39,7 +39,7 @@
         '<div class="stat-foot" style="border-top:1px solid rgba(255,255,255,.12);padding-top:12px;justify-content:space-between"><span style="color:#6EE7B7">' + icon('checkc', 'ico-sm') + ' Terverifikasi ' + (a.mode === 'WFH' ? 'WFH' : 'GPS') + '</span><span class="muted xs bold">' + esc(a.lokasi_masuk) + '</span></div>';
     } else {
       absenCard = '<div class="stat-top"><span class="stat-label">Absen Hari Ini</span><span class="stat-ico">' + icon('finger', 'ico-lg') + '</span></div>' +
-        '<div style="font-size:20px;font-weight:700">Belum Absen</div><div class="muted">Jam masuk ' + esc(d.jam_masuk) + ' WIB · Mode ' + esc(d.mode_kerja) + '</div>' +
+        '<div style="font-size:20px;font-weight:700">' + (d.jam_masuk === 'Libur' ? 'Hari Libur' : 'Belum Absen') + '</div><div class="muted">' + (d.jam_masuk === 'Libur' ? 'Tidak ada jadwal kerja hari ini' : 'Jam masuk ' + esc(d.jam_masuk) + ' WIB') + ' · Mode ' + esc(d.mode_kerja) + '</div>' +
         '<div class="stat-foot" style="border-top:1px solid rgba(255,255,255,.12);padding-top:12px"><a href="#/app/absensi" style="color:#fff" class="bold">Absen sekarang ' + icon('arrowr', 'ico-sm') + '</a></div>';
     }
 
@@ -109,7 +109,7 @@
       const wfh = d.mode_kerja === 'WFH';
       const st = { foto: null, fotoOk: false, pos: null, near: null, inRadius: false, sending: false };
 
-      const statusBadge = !a ? '<span class="badge blue">' + icon('clock', 'ico-sm') + ' Belum Absen Masuk</span>'
+      const statusBadge = !a && d.libur ? '<span class="badge">' + icon('calendar', 'ico-sm') + ' Hari Libur</span>' : !a ? '<span class="badge blue">' + icon('clock', 'ico-sm') + ' Belum Absen Masuk</span>'
         : !a.jam_pulang ? '<span class="badge ' + (a.status === 'Terlambat' ? 'amber' : 'green') + '">' + icon('checkc', 'ico-sm') + ' Masuk ' + esc(fmt.jam(a.jam_masuk)) + ' · ' + esc(a.status) + '</span>'
           : '<span class="badge green">' + icon('checkc', 'ico-sm') + ' Absensi Lengkap</span>';
 
@@ -130,7 +130,7 @@
           '<div class="card" style="display:flex;flex-direction:column;gap:18px"><div class="card-title-ico">' + icon('pin', 'ico-lg') + '<h3>Lokasi Absensi</h3></div>' +
           '<div class="geo-box" data-geo><div class="row between"><span>Status Geofence</span><span class="badge">' + '<span class="spinner sm"></span> Mencari GPS…</span></div></div>' +
           '<div class="map" data-map></div>' +
-          '<div class="geo-box"><dl class="kv"><dt>Shift Kerja</dt><dd>Reguler (' + esc(d.jam_masuk) + ' – ' + esc(d.jam_pulang) + ')</dd><dt>Toleransi</dt><dd>' + d.toleransi + ' menit</dd><dt>Metode</dt><dd>Selfie + ' + (wfh ? 'GPS (WFH)' : 'GPS Geofence') + '</dd></dl></div>' +
+          '<div class="geo-box"><dl class="kv"><dt>Jadwal Hari Ini</dt><dd>' + (d.libur ? 'Hari libur' : esc(d.jam_masuk) + ' – ' + esc(d.jam_pulang)) + '</dd><dt>Toleransi</dt><dd>' + d.toleransi + ' menit</dd><dt>Metode</dt><dd>Selfie + ' + (wfh ? 'GPS (WFH)' : 'GPS Geofence') + '</dd></dl></div>' +
           '<div style="margin-top:auto"><button class="btn lg block dark" data-submit disabled style="height:60px;border-radius:99px;font-size:17px">' + icon('checkc', 'ico-lg') + ' Konfirmasi Absen ' + (tipe === 'masuk' ? 'Masuk' : 'Pulang') + '</button>' +
           '<p class="small muted mt-sm" style="text-align:center" data-hint>Ambil selfie dan tunggu lokasi GPS terbaca.</p></div></div>' +
           '</div>') +
@@ -295,7 +295,8 @@
   // ============================================================
   function workdaysClient(a, b) {
     const x = UI.pd(a), y = UI.pd(b); if (!x || !y || y < x) return 0;
-    let n = 0; for (let d = new Date(x); d <= y; d.setDate(d.getDate() + 1)) { const w = d.getDay(); if (w !== 0 && w !== 6) n++; }
+    const hk = ((App.state.info || {}).hari_kerja || [1, 2, 3, 4, 5]).map(Number);
+    let n = 0; for (let d = new Date(x); d <= y; d.setDate(d.getDate() + 1)) { if (hk.indexOf(d.getDay()) > -1) n++; }
     return n;
   }
 

@@ -99,26 +99,49 @@
 
         // ---------- Jam kerja
         jam() {
-          const hk = String(s.HARI_KERJA || '1,2,3,4,5').split(',').map(x => x.trim());
-          const HR = [['1', 'Senin'], ['2', 'Selasa'], ['3', 'Rabu'], ['4', 'Kamis'], ['5', 'Jumat'], ['6', 'Sabtu'], ['0', 'Minggu']];
-          body.innerHTML = '<form class="card" data-f style="max-width:820px"><div class="card-head"><h3>Jam Kerja & Kebijakan</h3></div><div class="form-grid">' +
-            '<div class="field"><label>Jam masuk</label><input class="input" type="time" name="JAM_MASUK" value="' + esc(s.JAM_MASUK) + '"></div>' +
-            '<div class="field"><label>Jam pulang</label><input class="input" type="time" name="JAM_PULANG" value="' + esc(s.JAM_PULANG) + '"></div>' +
-            '<div class="field"><label>Toleransi keterlambatan (menit)</label><input class="input" type="number" min="0" max="120" name="TOLERANSI_MENIT" value="' + esc(s.TOLERANSI_MENIT) + '"><span class="hint">Absen setelah jam masuk + toleransi dianggap terlambat.</span></div>' +
+          // Jadwal per hari: setiap hari bisa libur atau punya jam masuk/pulang sendiri (mis. Sabtu setengah hari)
+          const NAMA = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'], URUT = [1, 2, 3, 4, 5, 6, 0];
+          let jd = null;
+          try { jd = s.JADWAL_KERJA ? JSON.parse(s.JADWAL_KERJA) : null; } catch (e) { jd = null; }
+          if (!jd) {
+            const hk = String(s.HARI_KERJA || '1,2,3,4,5').split(',').map(x => String(Number(x.trim()) % 7));
+            jd = {}; for (let d = 0; d < 7; d++) jd[d] = hk.includes(String(d)) ? { masuk: s.JAM_MASUK || '08:00', pulang: s.JAM_PULANG || '17:00' } : null;
+          }
+          const durasi = (m, p) => { const a = m.split(':'), b = p.split(':'); const x = (+b[0] * 60 + +b[1]) - (+a[0] * 60 + +a[1]); return x > 0 ? Math.floor(x / 60) + ' j ' + (x % 60 ? x % 60 + ' m' : '') : '–'; };
+          const row = d => { const x = jd[d]; return '<tr data-d="' + d + '"' + (x ? '' : ' style="opacity:.55"') + '><td class="bold">' + NAMA[d] + '</td>' +
+            '<td><label class="check"><input type="checkbox" data-on' + (x ? ' checked' : '') + '> ' + (x ? 'Kerja' : 'Libur') + '</label></td>' +
+            '<td><input class="input" type="time" data-m value="' + esc(x ? x.masuk : '08:00') + '"' + (x ? '' : ' disabled') + ' style="max-width:130px"></td>' +
+            '<td><input class="input" type="time" data-p value="' + esc(x ? x.pulang : '17:00') + '"' + (x ? '' : ' disabled') + ' style="max-width:130px"></td>' +
+            '<td class="muted small hide-m" data-dur>' + (x ? durasi(x.masuk, x.pulang) : 'Libur') + '</td></tr>'; };
+          body.innerHTML = '<form class="stack" data-f style="max-width:900px">' +
+            '<div class="card"><div class="card-head"><div><h3>Jadwal Kerja per Hari</h3><div class="sub">Atur hari kerja dan jam masuk/pulang masing-masing hari. Dipakai untuk status terlambat, pulang awal, durasi cuti, dan KPI.</div></div>' +
+            '<button type="button" class="btn sm soft" data-copy>' + icon('refresh', 'ico-sm') + ' Samakan Senin–Jumat dengan Senin</button></div>' +
+            '<div class="table-wrap"><table class="table"><thead><tr><th>Hari</th><th>Status</th><th>Jam masuk</th><th>Jam pulang</th><th class="hide-m">Durasi</th></tr></thead><tbody data-rows>' + URUT.map(row).join('') + '</tbody></table></div>' +
+            '<div class="row wrap mt"><span class="xs muted">Contoh umum:</span><button type="button" class="chip" data-preset="5">Senin–Jumat 08–17</button><button type="button" class="chip" data-preset="6">+ Sabtu 08–13</button></div></div>' +
+            '<div class="card"><div class="card-head"><h3>Kebijakan</h3></div><div class="form-grid">' +
+            '<div class="field"><label>Toleransi keterlambatan (menit)</label><input class="input" type="number" min="0" max="120" name="TOLERANSI_MENIT" value="' + esc(s.TOLERANSI_MENIT) + '"><span class="hint">Berlaku untuk semua hari. Absen setelah jam masuk + toleransi dianggap terlambat.</span></div>' +
             '<div class="field"><label>Kuota cuti tahunan default (hari)</label><input class="input" type="number" min="0" max="60" name="KUOTA_CUTI" value="' + esc(s.KUOTA_CUTI) + '"><span class="hint">Untuk karyawan baru. Bisa diubah per karyawan.</span></div>' +
-            '<div class="field full"><label>Hari kerja</label><div class="chips" data-hk>' + HR.map(([v, l]) => '<label class="chip' + (hk.includes(v) ? ' active' : '') + '"><input type="checkbox" class="sr-only" value="' + v + '"' + (hk.includes(v) ? ' checked' : '') + '>' + l + '</label>').join('') + '</div><span class="hint">Dipakai untuk menghitung hari kerja, durasi cuti, dan KPI.</span></div>' +
             '<div class="field"><label>Penandatangan SP & slip</label><input class="input" name="PENANDATANGAN_SP" value="' + esc(s.PENANDATANGAN_SP) + '"></div>' +
             '<div class="field"><label>Jabatan penandatangan</label><input class="input" name="JABATAN_PENANDATANGAN" value="' + esc(s.JABATAN_PENANDATANGAN) + '"></div>' +
-            '</div><div class="form-actions mt"><button class="btn" type="submit">' + icon('save', 'ico-sm') + ' Simpan</button></div></form>';
-          body.querySelectorAll('[data-hk] input').forEach(c => c.onchange = () => c.parentNode.classList.toggle('active', c.checked));
-          const f = body.querySelector('[data-f]');
+            '</div><div class="form-actions mt"><button class="btn" type="submit">' + icon('save', 'ico-sm') + ' Simpan Jadwal & Kebijakan</button></div></div></form>';
+          const f = body.querySelector('[data-f]'), rows = body.querySelector('[data-rows]');
+          const baca = () => { const o = {}; rows.querySelectorAll('tr').forEach(tr => { const d = tr.dataset.d; o[d] = tr.querySelector('[data-on]').checked ? { masuk: tr.querySelector('[data-m]').value, pulang: tr.querySelector('[data-p]').value } : null; }); return o; };
+          const gambar = () => { rows.innerHTML = URUT.map(row).join(''); };
+          rows.addEventListener('change', () => { jd = baca(); gambar(); });
+          body.querySelector('[data-copy]').onclick = () => { jd = baca(); const ref = jd[1]; if (!ref) return toast('Aktifkan hari Senin terlebih dahulu.', 'warning'); [2, 3, 4, 5].forEach(d => { jd[d] = Object.assign({}, ref); }); gambar(); };
+          body.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
+            jd = { 0: null }; [1, 2, 3, 4, 5].forEach(d => { jd[d] = { masuk: '08:00', pulang: '17:00' }; });
+            jd[6] = b.dataset.preset === '6' ? { masuk: '08:00', pulang: '13:00' } : null; gambar();
+          });
           f.onsubmit = e => {
             e.preventDefault();
+            jd = baca();
+            const aktif = Object.keys(jd).filter(d => jd[d]);
+            if (!aktif.length) return toast('Minimal satu hari kerja.', 'warning');
+            for (const d of aktif) if (!jd[d].masuk || !jd[d].pulang || jd[d].pulang <= jd[d].masuk) return toast('Jam pulang ' + NAMA[d] + ' harus setelah jam masuk.', 'warning');
             const v = UI.formData(f);
-            const hari = Array.from(f.querySelectorAll('[data-hk] input:checked')).map(c => c.value);
-            if (!hari.length) return toast('Pilih minimal satu hari kerja.', 'warning');
-            v.HARI_KERJA = hari.join(',');
             Object.keys(v).forEach(k => { if (!/^[A-Z_]+$/.test(k)) delete v[k]; });
+            v.JADWAL_KERJA = JSON.stringify(jd);
             saveSettings(f.querySelector('[type=submit]'), v);
           };
         },
@@ -214,14 +237,39 @@
   // ============================================================
   // AKUN & AKSES (khusus Superadmin)
   // ============================================================
+  /**
+   * Dialog hapus akun login (karyawan berhenti). Wajib mengetik username agar tidak terhapus tanpa sengaja.
+   * Riwayat absensi, izin, gaji & KPI tetap tersimpan; data karyawan menjadi Nonaktif.
+   */
+  function hapusAkun(u, onDone) {
+    const m = UI.modal({ title: 'Hapus akun ' + u.nama, size: 'sm',
+      body: '<div class="alert red mb">' + icon('alert') + '<div>Akun <b>@' + esc(u.username) + '</b> akan dihapus permanen dan langsung keluar dari semua perangkat. Username dapat dipakai lagi untuk karyawan lain.</div></div>' +
+        '<div class="alert green mb small">' + icon('checkc', 'ico-sm') + '<div>Riwayat absensi, izin, gaji, KPI & SP <b>tetap tersimpan</b> untuk laporan. Data karyawan ditandai Nonaktif.</div></div>' +
+        '<div class="field"><label>Ketik <b>' + esc(u.username) + '</b> untuk konfirmasi</label><input class="input" data-k autocomplete="off" autocapitalize="off"></div>',
+      foot: '<button class="btn ghost" data-close>Batal</button><button class="btn danger" data-ok disabled>' + icon('trash', 'ico-sm') + ' Hapus Akun</button>' });
+    const inp = m.$('[data-k]'), ok = m.$('[data-ok]');
+    inp.oninput = () => { ok.disabled = inp.value.trim().toLowerCase() !== String(u.username).toLowerCase(); };
+    ok.onclick = async () => {
+      busy(ok, true, 'Menghapus…');
+      try { const r = await API.call('deleteAkun', { id: u.id }, { full: true }); toast(r.message); m.close(); onDone && onDone(); }
+      catch (e) { toast(e.message, 'error'); busy(ok, false); }
+    };
+  }
+  window.AkunKit = { hapus: hapusAkun };
+
   Pages.register('akun', {
-    title: 'Akun & Akses', roles: 'SA',
+    title: 'Akun & Akses', roles: 'HR',
     async render(el, q, alive) {
       let rows = await API.call('listAkun');
       if (!alive()) return;
-      let role = 'STAF', cari = '';
-      el.innerHTML = PageKit.head('Akun & Akses', 'Tambah, ubah role, reset kata sandi, dan nonaktifkan akun. Akun yang dinonaktifkan langsung kehilangan akses.', '<button class="btn" data-add>' + icon('plus', 'ico-sm') + ' Tambah Akun</button>') +
-        '<div class="card"><div class="row between wrap mb"><div class="tabs" data-tabs>' + [['STAF', 'HRD & Admin'], ['SUPERADMIN', 'Superadmin'], ['KARYAWAN', 'Karyawan'], ['ALL', 'Semua']].map(([k, l]) => '<button class="tab' + (k === role ? ' active' : '') + '" data-r="' + k + '">' + l + '</button>').join('') + '</div>' +
+      const sa = App.isSA();
+      // HRD & Admin HRD mengelola semua akun kecuali Superadmin (server juga menyaring & menolak)
+      let role = sa ? 'STAF' : 'KARYAWAN', cari = '';
+      const TABS = sa ? [['STAF', 'HRD & Admin'], ['SUPERADMIN', 'Superadmin'], ['KARYAWAN', 'Karyawan'], ['ALL', 'Semua']]
+        : [['KARYAWAN', 'Karyawan'], ['STAF', 'HRD & Admin HRD'], ['ALL', 'Semua']];
+      el.innerHTML = PageKit.head('Akun & Akses', sa ? 'Kelola semua akun: tambah, ubah role, reset kata sandi, nonaktifkan, atau hapus.'
+        : 'Kelola akun login seluruh karyawan (kecuali Superadmin). Hapus akun karyawan yang sudah berhenti — riwayatnya tetap tersimpan.', '<button class="btn" data-add>' + icon('plus', 'ico-sm') + ' Tambah Akun</button>') +
+        '<div class="card"><div class="row between wrap mb"><div class="tabs" data-tabs>' + TABS.map(([k, l]) => '<button class="tab' + (k === role ? ' active' : '') + '" data-r="' + k + '">' + l + '</button>').join('') + '</div>' +
         '<div class="input-group" style="width:240px">' + icon('search', 'lead') + '<input class="input" placeholder="Cari nama/username…" data-cari></div></div><div data-list></div></div>';
       const box = el.querySelector('[data-list]');
       const draw = () => {
@@ -230,19 +278,20 @@
           f.map(u => '<tr' + (u.status !== 'Aktif' ? ' style="opacity:.6"' : '') + '><td><div class="person"><span class="avatar">' + esc(initials(u.nama)) + '</span><div><div class="nm">' + esc(u.nama) + (u.saya ? ' <span class="badge blue">Anda</span>' : '') + '</div><div class="jb">@' + esc(u.username) + (u.jabatan ? ' · ' + esc(u.jabatan) : '') + '</div></div></div></td>' +
             '<td>' + badge(u.role) + '</td><td>' + badge(u.status) + '</td><td class="hide-m small muted">' + esc(u.last_login ? fmt.ago(u.last_login) : 'Belum pernah') + '</td>' +
             '<td><div class="actions"><button class="icon-btn" data-edit="' + esc(u.id) + '" title="Ubah">' + icon('edit', 'ico-sm') + '</button><button class="icon-btn" data-pw="' + esc(u.id) + '" title="Reset kata sandi">' + icon('key', 'ico-sm') + '</button>' +
-            (u.saya ? '' : '<button class="icon-btn ' + (u.status === 'Aktif' ? 'no' : 'ok') + '" data-st="' + esc(u.id) + '" title="' + (u.status === 'Aktif' ? 'Nonaktifkan' : 'Aktifkan') + '">' + icon(u.status === 'Aktif' ? 'lock' : 'refresh', 'ico-sm') + '</button>') + '</div></td></tr>').join('') +
+            (u.saya ? '' : '<button class="icon-btn ' + (u.status === 'Aktif' ? '' : 'ok') + '" data-st="' + esc(u.id) + '" title="' + (u.status === 'Aktif' ? 'Nonaktifkan sementara' : 'Aktifkan') + '">' + icon(u.status === 'Aktif' ? 'lock' : 'refresh', 'ico-sm') + '</button>' +
+              '<button class="icon-btn no" data-del="' + esc(u.id) + '" title="Hapus akun (karyawan berhenti)">' + icon('trash', 'ico-sm') + '</button>') + '</div></td></tr>').join('') +
           '</tbody></table></div>' : empty('users', 'Tidak ada akun.');
       };
       const reload = async () => { rows = await API.call('listAkun'); draw(); };
       const form = (u) => {
-        const baru = !u; u = u || { role: 'HRD' };
+        const baru = !u; u = u || { role: sa ? 'HRD' : 'KARYAWAN' };
         const m = UI.modal({ title: baru ? 'Tambah Akun' : 'Ubah Akun @' + u.username, size: 'lg',
           body: '<form class="form-grid" data-f><div class="field"><label>Nama lengkap *</label><input class="input" name="nama" value="' + esc(u.nama || '') + '"></div>' +
             '<div class="field"><label>Jabatan</label><input class="input" name="jabatan" value="' + esc(u.jabatan || '') + '" placeholder="mis. HRD Manager"></div>' +
             '<div class="field"><label>Email</label><input class="input" type="email" name="email" value="' + esc(u.email || '') + '"></div>' +
-            '<div class="field"><label>Role</label><select class="select" name="role"' + (u.saya ? ' disabled' : '') + '>' + UI.options([{ v: 'HRD', l: 'HRD' }, { v: 'ADMIN_HRD', l: 'Admin HRD' }, { v: 'SUPERADMIN', l: 'Superadmin' }, { v: 'KARYAWAN', l: 'Karyawan' }], u.role) + '</select></div>' +
+            '<div class="field"><label>Role</label><select class="select" name="role"' + (u.saya ? ' disabled' : '') + '>' + UI.options([{ v: 'KARYAWAN', l: 'Karyawan' }, { v: 'ADMIN_HRD', l: 'Admin HRD' }, { v: 'HRD', l: 'HRD' }].concat(sa ? [{ v: 'SUPERADMIN', l: 'Superadmin' }] : []), u.role) + '</select></div>' +
             (baru ? '<div class="field"><label>Username *</label><input class="input" name="username" autocomplete="off"></div><div class="field"><label>Kata sandi awal *</label><input class="input" name="password" value="' + HRView.genPass() + '"></div>' : '') +
-            '<div class="full alert small">' + icon('info', 'ico-sm') + '<div><b>HRD & Admin HRD</b> memiliki akses operasional yang sama (persetujuan, data karyawan, gaji, SP, berita, pengaturan). <b>Superadmin</b> juga mengelola akun & akses.</div></div></form>',
+            '<div class="full alert small">' + icon('info', 'ico-sm') + '<div><b>HRD & Admin HRD</b> memiliki akses operasional yang sama (persetujuan, data karyawan, gaji, SP, berita, pengaturan, akun karyawan). Akun <b>Superadmin</b> hanya dikelola oleh Superadmin.' + (baru ? ' Untuk karyawan biasa, lengkapi profilnya di menu Data Karyawan.' : '') + '</div></div></form>',
           foot: '<button class="btn ghost" data-close>Batal</button><button class="btn" data-save>' + icon('save', 'ico-sm') + ' Simpan</button>' });
         m.$('[data-save]').onclick = async () => {
           const d = UI.formData(m.$('[data-f]'));
@@ -255,7 +304,8 @@
       el.querySelector('[data-tabs]').onclick = e => { const t = e.target.closest('[data-r]'); if (!t) return; role = t.dataset.r; el.querySelectorAll('[data-r]').forEach(x => x.classList.toggle('active', x === t)); draw(); };
       el.querySelector('[data-cari]').oninput = UI.debounce(e => { cari = e.target.value.toLowerCase(); draw(); }, 150);
       box.addEventListener('click', async e => {
-        const ed = e.target.closest('[data-edit]'), pw = e.target.closest('[data-pw]'), st = e.target.closest('[data-st]');
+        const ed = e.target.closest('[data-edit]'), pw = e.target.closest('[data-pw]'), st = e.target.closest('[data-st]'), dl = e.target.closest('[data-del]');
+        if (dl) { const u = rows.find(x => x.id === dl.dataset.del); hapusAkun(u, () => { rows = rows.filter(x => x.id !== u.id); draw(); }); }
         if (ed) form(rows.find(u => u.id === ed.dataset.edit));
         if (pw) { const u = rows.find(x => x.id === pw.dataset.pw); HRView.resetPw(u.id, u.nama); }
         if (st) {

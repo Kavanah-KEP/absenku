@@ -318,7 +318,8 @@
             '<td class="hide-m">' + badge(k.status_karyawan || 'Tetap', 'blue') + '</td><td class="small">@' + esc(k.username || '-') + ' ' + (k.role && k.role !== 'KARYAWAN' ? badge(k.role) : '') + (k.status_akun === 'Nonaktif' ? ' ' + badge('Nonaktif') : '') + '</td>' +
             '<td><div class="actions"><button class="icon-btn" data-edit="' + esc(k.id) + '" title="Edit">' + icon('edit', 'ico-sm') + '</button>' +
             (k.user_id ? '<button class="icon-btn" data-pw="' + esc(k.id) + '" title="Reset kata sandi">' + icon('key', 'ico-sm') + '</button>' : '') +
-            (k.id !== App.state.user.karyawan_id ? '<button class="icon-btn ' + (k.status === 'Nonaktif' ? 'ok' : 'no') + '" data-tog="' + esc(k.id) + '" title="' + (k.status === 'Nonaktif' ? 'Aktifkan' : 'Nonaktifkan') + '">' + icon(k.status === 'Nonaktif' ? 'refresh' : 'trash', 'ico-sm') + '</button>' : '') +
+            (k.user_id && k.role !== 'SUPERADMIN' && k.id !== App.state.user.karyawan_id ? '<button class="icon-btn no" data-delakun="' + esc(k.id) + '" title="Hapus akun login (karyawan berhenti)">' + icon('trash', 'ico-sm') + '</button>' : '') +
+            (k.id !== App.state.user.karyawan_id && (k.role !== 'SUPERADMIN' || App.isSA()) ? '<button class="icon-btn ' + (k.status === 'Nonaktif' ? 'ok' : 'no') + '" data-tog="' + esc(k.id) + '" title="' + (k.status === 'Nonaktif' ? 'Aktifkan' : 'Nonaktifkan') + '">' + icon(k.status === 'Nonaktif' ? 'refresh' : 'lock', 'ico-sm') + '</button>' : '') +
             '</div></td></tr>').join('') + '</tbody></table></div><p class="xs muted mt">' + f.length + ' karyawan ditampilkan</p>' : empty('users', 'Tidak ada karyawan yang cocok.');
       };
       const reload = async () => { list = await daftarKaryawan(true); draw(); };
@@ -327,6 +328,8 @@
       el.querySelector('[data-cari]').oninput = UI.debounce(e => { cari = e.target.value.toLowerCase(); draw(); }, 150);
       box.addEventListener('click', async e => {
         const ed = e.target.closest('[data-edit]'), pw = e.target.closest('[data-pw]'), tg = e.target.closest('[data-tog]');
+        const da = e.target.closest('[data-delakun]');
+        if (da) { const k = list.find(x => x.id === da.dataset.delakun); window.AkunKit.hapus({ id: k.user_id, username: k.username, nama: k.nama }, reload); }
         if (ed) karyawanForm(list.find(k => k.id === ed.dataset.edit), reload);
         if (pw) { const k = list.find(x => x.id === pw.dataset.pw); resetPw(k.user_id, k.nama); }
         if (tg) {

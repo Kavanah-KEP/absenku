@@ -14,7 +14,7 @@
       { r: 'dashboard', t: 'Dashboard', i: 'home', roles: ALL },
       { r: 'absensi', t: 'Absensi', i: 'clock', roles: ALL },
       { r: 'izin', t: 'Izin, Cuti & Lembur', i: 'calendar', roles: ALL },
-      { r: 'kpi', t: 'KPI Saya', i: 'trend', roles: ALL },
+      { r: 'kpi', t: 'KPI Saya', i: 'trend', roles: ['KARYAWAN', 'ADMIN_HRD', 'HRD'] },
       { r: 'slip', t: 'Slip Gaji', i: 'wallet', roles: ALL },
       { r: 'sp-saya', t: 'Surat Peringatan', i: 'file', roles: ALL },
       { r: 'chat', t: 'Chat HRD', i: 'message', roles: ['KARYAWAN'], badge: 'chat' }
@@ -32,7 +32,7 @@
       { r: 'laporan', t: 'Laporan', i: 'printer' }
     ] },
     { group: 'Sistem', items: [
-      { r: 'akun', t: 'Akun & Akses', i: 'shield', roles: SA },
+      { r: 'akun', t: 'Akun & Akses', i: 'shield', roles: HR },
       { r: 'pengaturan', t: 'Pengaturan', i: 'settings', roles: HR },
       { r: 'profil', t: 'Profil Saya', i: 'user', roles: ALL }
     ] }
@@ -84,6 +84,7 @@
   function bootPrefetch() {
     const r = App.state.user && App.state.user.role;
     if (!r) return Promise.resolve();
+    setTimeout(() => App.warmAll(), 2500);
     const calls = [['me'], ['getAbsenToday'], ['listNotif']];
     if (r === 'KARYAWAN') calls.push(['dashKaryawan'], ['myIzin'], ['myKPI', { periode: per() }], ['mySP'], ['myAbsensi', { periode: per() }], ['mySlip'], ['chatMessages']);
     else {
@@ -92,6 +93,31 @@
     }
     return API.prefetch(calls);
   }
+  /** Siapkan data SEMUA menu yang terlihat untuk role ini → setiap perpindahan menu instan. */
+  let lastWarm = 0;
+  App.warmAll = function () {
+    if (!App.state.user || !API.token()) return;
+    lastWarm = Date.now();
+    const seen = {}, calls = [];
+    visibleMenu().forEach(g => g.items.forEach(it => {
+      const f = ROUTE_DATA[it.r]; if (!f) return;
+      f().forEach(c => { const k = c[0] + JSON.stringify(c[1] || {}); if (!seen[k]) { seen[k] = 1; calls.push(c); } });
+    }));
+    // Dikirim bertahap (maks 12 per batch), satu demi satu agar tidak membebani server
+    let i = 0;
+    const next = () => { if (i >= calls.length || !App.state.user) return; const chunk = calls.slice(i, i + 12); i += 12; API.prefetch(chunk).then(() => setTimeout(next, 400)); };
+    const go = () => setTimeout(next, 600);
+    if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 3000 }); else go();
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && App.state.user && Date.now() - lastWarm > 3 * 60000) App.warmAll();
+  });
+  API.onWrite = function () {
+    // Setelah menyimpan/menghapus: data halaman ini & menu utama diambil ulang diam-diam
+    const { parts } = parseHash();
+    if (parts[0] === 'app') App.prefetchRoute(parts[1] || 'dashboard');
+    setTimeout(() => App.warmAll(), 1500);
+  };
   App.prefetchRoute = function (route) {
     const f = ROUTE_DATA[route];
     if (f && App.state.user) { try { API.prefetch(f()); } catch (e) { } }
@@ -542,9 +568,19 @@
       const d = UI.formData(form);
       if (!d.username || !d.password) return toast('Username dan kata sandi wajib diisi.', 'warning');
       const btn = form.querySelector('[type=submit]');
+      if (form._sending) return;                 // cegah kirim ganda (Enter + klik)
+      form._sending = true;
       busy(btn, true, 'Memeriksa…');
+      const setLabel = t => { if (btn.disabled) btn.innerHTML = '<span class="spinner sm"></span> ' + esc(t); };
+      // Beri tahu pengguna bila server sedang "bangun", agar tidak menutup halaman
+      const slow = setTimeout(() => setLabel('Menghubungkan ke server…'), 5000);
+      const slower = setTimeout(() => setLabel('Server sedang bersiap, mohon tunggu…'), 12000);
       try {
-        const r = await API.call('login', Object.assign({ prefetch: true }, d));
+        const r = await API.call('login', Object.assign({ prefetch: true }, d), {
+          onRetry: n => setLabel('Koneksi tersendat, mencoba lagi (' + (n + 1) + '/4)…')
+        });
+        clearTimeout(slow); clearTimeout(slower);
+        API.invalidate('all');   // buang sisa cache sesi sebelumnya
         API.setToken(r.token, !!d.remember);
         API.setUser(r.user);
         API.seed(r.prefetch);    // dashboard & halaman utama langsung siap dari respons login
@@ -554,7 +590,10 @@
         idlePreloadLibs();
         toast('Selamat datang, ' + r.user.nama + '!');
         App.go('#/app/dashboard');
-      } catch (err) { toast(err.message, 'error'); busy(btn, false); pass.select(); }
+      } catch (err) {
+        clearTimeout(slow); clearTimeout(slower);
+        toast(err.message, 'error'); busy(btn, false); pass.select();
+      } finally { form._sending = false; }
     };
     if (window.innerWidth > 768) form.querySelector('#lg-user').focus();
   }

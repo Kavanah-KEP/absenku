@@ -206,6 +206,30 @@ Jika Anda sudah memasang versi pertama:
 
 ---
 
+## BAGIAN F — Upgrade versi 3 (login andal, akun HRD, jadwal per hari)
+
+1. **Backend:** ganti seluruh isi `Kode.gs` → Ctrl+S → **Deploy → Manage deployments → ✏️ → Version: New version → Deploy** (URL tetap sama).
+2. **Frontend:** ekstrak ZIP baru, salin `GAS_URL` dari `config.js` lama ke `js/config.js` baru, timpa folder `absenku-frontend`, lalu:
+   ```bash
+   git add .
+   git commit -m "Upgrade v3"
+   git push
+   ```
+3. Di HP/laptop: tutup aplikasi lalu buka lagi (service worker memuat versi baru).
+4. Login sebagai HRD → **Pengaturan → Jam Kerja** → klik **"+ Sabtu 08–13"** (atau atur jam Sabtu sendiri) → **Simpan Jadwal & Kebijakan**.
+
+### Yang baru di versi 3
+| Fitur | Keterangan |
+|---|---|
+| Login andal | Bila server Apps Script tersendat, aplikasi otomatis mencoba lagi (maks 4x) dan menampilkan status "Menghubungkan ke server…". Balasan sesi lama tidak lagi bisa mengeluarkan sesi baru. |
+| Semua menu siap sebelum diklik | Setelah login, data semua menu sesuai role disiapkan bertahap di latar belakang. |
+| HRD kelola akun | HRD & Admin HRD membuka **Akun & Akses**: tambah, ubah role, reset sandi, nonaktifkan, dan **hapus akun** semua karyawan **kecuali Superadmin**. Tombol hapus juga ada di **Data Karyawan** (ikon tempat sampah). |
+| Hapus akun karyawan berhenti | Wajib mengetik username untuk konfirmasi. Akun langsung keluar dari semua perangkat, username bisa dipakai lagi. **Riwayat absensi, izin, gaji, KPI & SP tetap tersimpan**; data karyawan menjadi Nonaktif. |
+| KPI tanpa owner | Pemilik akun Superadmin (owner) tidak masuk KPI Karyawan, laporan KPI, maupun rata-rata KPI tim. Menu "KPI Saya" disembunyikan untuk Superadmin. |
+| Jadwal per hari | Setiap hari bisa libur atau punya jam sendiri. Status terlambat, pulang awal, durasi cuti, dan hari kerja KPI mengikuti jadwal hari tersebut. |
+
+---
+
 ## Troubleshooting
 
 | Gejala | Penyebab & solusi |
@@ -218,6 +242,7 @@ Jika Anda sudah memasang versi pertama:
 | Kamera/GPS tidak jalan | Pastikan situs dibuka lewat **https://** dan izin Lokasi/Kamera untuk situs diizinkan di browser |
 | "Di luar radius" padahal di kantor | Titik kantor kurang tepat atau radius terlalu kecil → perbarui di Pengaturan → Lokasi Kantor |
 | Perubahan backend tidak berlaku | Belum membuat **New version** di Manage deployments (Bagian D) |
+| Login lama di pagi hari | Pastikan trigger **keepWarm** terpasang (Bagian A5). Aplikasi tetap mencoba ulang otomatis — tunggu hingga selesai, jangan tutup halaman |
 | Server "sibuk" saat jam absen pagi | Kuota GAS: jumlah eksekusi serentak terbatas (±30). Minta karyawan mengulang beberapa detik kemudian; untuk >300 karyawan pertimbangkan membagi jam masuk |
 | Tampilan versi lama setelah push | Service worker: tutup lalu buka lagi aplikasinya (versi baru aktif pada pembukaan berikutnya), atau **Ctrl+Shift+R** / Incognito |
 | Data terasa belum terbaru | Tunggu sebentar — data disegarkan otomatis; di halaman daftar akan muncul tombol **"Ada data terbaru · Muat ulang"** |

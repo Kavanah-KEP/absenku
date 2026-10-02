@@ -7,7 +7,7 @@
    • Data dari Google Apps Script TIDAK PERNAH di-cache di sini.
    Naikkan VERSION bila ingin memaksa semua perangkat memuat ulang total.
    ============================================================ */
-const VERSION = 'absenku-v2';
+const VERSION = 'absenku-v3';
 const SHELL = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest',
   'js/config.js', 'js/api.js', 'js/ui.js', 'js/app.js',
