@@ -258,20 +258,53 @@
   // ---- Grafik (Chart.js)
   let charts = [];
   function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  // ---- Pustaka pihak ketiga dimuat SAAT DIBUTUHKAN (lazy) — hemat ±1 MB di setiap pembukaan HP
+  const LIBS = {
+    chart: { js: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js'], ok: () => window.Chart },
+    leaflet: { css: ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'], js: ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'], ok: () => window.L },
+    html2pdf: { js: ['https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'], ok: () => window.html2pdf }
+  };
+  const libPromises = {};
+  function need(name) {
+    const lib = LIBS[name];
+    if (lib.ok()) return Promise.resolve();
+    if (libPromises[name]) return libPromises[name];
+    (lib.css || []).forEach(href => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.crossOrigin = ''; document.head.appendChild(l); });
+    libPromises[name] = Promise.all(lib.js.map(src => new Promise((res, rej) => {
+      const sc = document.createElement('script'); sc.src = src; sc.async = true; sc.crossOrigin = '';
+      sc.onload = res; sc.onerror = () => rej(new Error('Gagal memuat ' + name)); document.head.appendChild(sc);
+    }))).then(() => { if (!lib.ok()) throw new Error('Gagal memuat ' + name); })
+      .catch(e => { delete libPromises[name]; throw e; });
+    return libPromises[name];
+  }
+
   function chart(canvas, cfg) {
     if (!canvas) return null;
-    if (!window.Chart) {
+    const create = () => {
+      if (!canvas.isConnected) return null;          // halaman sudah berpindah
+      Chart.defaults.font.family = cssVar('--font') || 'sans-serif';
+      Chart.defaults.color = cssVar('--muted');
+      Chart.defaults.borderColor = cssVar('--border');
+      const c = new Chart(canvas, cfg);
+      charts.push(c);
+      return c;
+    };
+    if (window.Chart) return create();
+    need('chart').then(create).catch(() => {
       const box = canvas.parentNode;
-      if (box) { box.style.height = 'auto'; box.innerHTML = '<div class="empty small">' + icon('chart') + '<div>Grafik tidak dapat dimuat (periksa koneksi internet).</div></div>'; }
-      return null;
-    }
-    Chart.defaults.font.family = cssVar('--font') || 'sans-serif';
-    Chart.defaults.color = cssVar('--muted');
-    Chart.defaults.borderColor = cssVar('--border');
-    const c = new Chart(canvas, cfg);
-    charts.push(c);
-    return c;
+      if (box && canvas.isConnected) { box.style.height = 'auto'; box.innerHTML = '<div class="empty small">' + icon('chart') + '<div>Grafik tidak dapat dimuat (periksa koneksi internet).</div></div>'; }
+    });
+    return null;
   }
+
+  /** Kerangka halaman (skeleton) — terasa lebih cepat daripada spinner. */
+  function skeleton() {
+    const b = (h, w) => '<div class="skeleton" style="height:' + h + 'px;width:' + (w || '100%') + '"></div>';
+    return '<div class="skel-page">' + b(30, '42%') + b(14, '64%') +
+      '<div class="grid g-4 keep2 mt">' + [1, 2, 3, 4].map(() => '<div class="card">' + b(12, '50%') + '<div style="height:14px"></div>' + b(30, '40%') + '</div>').join('') + '</div>' +
+      '<div class="card mt">' + b(16, '30%') + '<div style="height:16px"></div>' + [1, 2, 3, 4, 5].map(() => b(14) + '<div style="height:14px"></div>').join('') + '</div></div>';
+  }
+
   function destroyCharts() { charts.forEach(c => { try { c.destroy(); } catch (e) { } }); charts = []; }
 
   // ---- Kalender bulanan
@@ -325,6 +358,6 @@
   function debounce(fn, ms) { let t; return function () { const a = arguments; clearTimeout(t); t = setTimeout(() => fn.apply(this, a), ms || 250); }; }
   function options(list, sel) { return list.map(x => { const v = typeof x === 'object' ? x.v : x, l = typeof x === 'object' ? x.l : x; return '<option value="' + esc(v) + '"' + (String(v) === String(sel) ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join(''); }
 
-  window.UI = { icon, esc, fmt, initials, badge, toast, modal, confirm, prompt, busy, empty, loading, formData, fileToDataUrl, readDataUrl,
+  window.UI = { need, skeleton, icon, esc, fmt, initials, badge, toast, modal, confirm, prompt, busy, empty, loading, formData, fileToDataUrl, readDataUrl,
     downloadB64, b64ToBlob, viewFile, chart, destroyCharts, cssVar, calendar, ring, loadFont, applyTheme, debounce, options, isoDate, periodeNow, pd, ROLE_LABEL };
 })();

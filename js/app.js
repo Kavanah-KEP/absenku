@@ -56,6 +56,87 @@
   window.App = App;
 
   // ============================================================
+  // INSTANT UX — prefetch & pembaruan otomatis
+  // ============================================================
+  const today = () => UI.isoDate(), per = () => UI.periodeNow();
+  const IZIN_PENDING = { status: 'Menunggu', jenis: 'Semua' };
+  /** Data yang dibutuhkan tiap halaman → diambil saat jari menyentuh menu (sebelum klik selesai). */
+  const ROUTE_DATA = {
+    dashboard: () => App.isSA() ? [['dashSuperadmin'], ['dashHRD']] : App.isHR() ? [['dashHRD']] : [['dashKaryawan']],
+    absensi: () => [['getAbsenToday'], ['myAbsensi', { periode: per() }]],
+    izin: () => [['myIzin']],
+    kpi: () => [['myKPI', { periode: per() }]],
+    slip: () => [['mySlip']],
+    'sp-saya': () => [['mySP']],
+    chat: () => App.isHR() ? [['chatThreads']] : [['chatMessages']],
+    persetujuan: () => [['listIzin', IZIN_PENDING]],
+    'rekap-absensi': () => [['listKaryawan'], ['listAbsensi', { dari: today(), sampai: today(), karyawan_id: '' }]],
+    karyawan: () => [['listKaryawan']],
+    'kpi-karyawan': () => [['listKPI', { periode: per() }]],
+    gaji: () => [['listKaryawan'], ['listGaji', { periode: '' }]],
+    bpjs: () => [['listBPJS']],
+    sp: () => [['listKaryawan'], ['listSP']],
+    berita: () => [['listBeritaAdmin']],
+    pengaturan: () => [['getSettingsAdmin']],
+    akun: () => [['listAkun']]
+  };
+  /** Paket awal per role — satu request batch setelah login / saat aplikasi dibuka. */
+  function bootPrefetch() {
+    const r = App.state.user && App.state.user.role;
+    if (!r) return Promise.resolve();
+    const calls = [['me'], ['getAbsenToday'], ['listNotif']];
+    if (r === 'KARYAWAN') calls.push(['dashKaryawan'], ['myIzin'], ['myKPI', { periode: per() }], ['mySP'], ['myAbsensi', { periode: per() }], ['mySlip'], ['chatMessages']);
+    else {
+      if (r === 'SUPERADMIN') calls.push(['dashSuperadmin'], ['listAkun']);
+      calls.push(['dashHRD'], ['listIzin', IZIN_PENDING], ['listKaryawan'], ['myIzin'], ['chatThreads']);
+    }
+    return API.prefetch(calls);
+  }
+  App.prefetchRoute = function (route) {
+    const f = ROUTE_DATA[route];
+    if (f && App.state.user) { try { API.prefetch(f()); } catch (e) { } }
+  };
+  // Prefetch ketika pointer/jari menyentuh tautan menu
+  ['pointerdown', 'mouseover', 'touchstart'].forEach(ev => document.addEventListener(ev, e => {
+    const a = e.target.closest && e.target.closest('a[href^="#/app/"]');
+    if (!a || a._pf) return;
+    a._pf = true; setTimeout(() => { a._pf = false; }, 4000);
+    App.prefetchRoute(a.getAttribute('href').replace('#/app/', '').split('?')[0]);
+  }, { passive: true }));
+
+  // Lacak action yang dipakai halaman aktif → bila datanya berubah di server, perbarui tampilan
+  let pageActions = new Set(), freshTimer = null, freshPending = false;
+  API._track = a => pageActions.add(a);
+  API.onFresh((action, data) => {
+    if (action === 'me' && data && data.user) {
+      const roleChanged = App.state.user && App.state.user.role !== data.user.role;
+      App.state.user = data.user; App.state.counts = data.counts || App.state.counts; API.setUser(data.user); updateCounts();
+      if (roleChanged) { const sh = document.querySelector('.shell'); if (sh) sh.remove(); App.route(); }
+      return;
+    }
+    if (!pageActions.has(action)) return;
+    clearTimeout(freshTimer);
+    freshTimer = setTimeout(applyFresh, 250);
+  });
+  function applyFresh() {
+    const { parts, query } = parseHash();
+    if (parts[0] !== 'app') return;
+    const def = registry[parts[1] || 'dashboard'];
+    if (!def) return;
+    const busyUI = document.querySelector('.modal-back, .dropdown') ||
+      (document.activeElement && document.activeElement.closest && document.activeElement.closest('#page') && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName));
+    if (def.autoRefresh && !busyUI) { const y = window.scrollY; renderApp(parts[1] || 'dashboard', query, { soft: true }).then(() => window.scrollTo(0, y)); return; }
+    showFreshPill();
+  }
+  function showFreshPill() {
+    if (document.querySelector('.fresh-pill')) return;
+    const b = document.createElement('button');
+    b.className = 'fresh-pill'; b.innerHTML = icon('refresh', 'ico-sm') + ' Ada data terbaru · Muat ulang';
+    b.onclick = () => { b.remove(); App.route(); };
+    document.body.appendChild(b);
+  }
+
+  // ============================================================
   // Info publik & tema
   // ============================================================
   function cachedInfo() { try { return JSON.parse(API.store.get('absenku_info') || 'null'); } catch (e) { return null; } }
@@ -112,12 +193,22 @@
     if (parts[0] === 'app') {
       if (!API.token()) return App.go('#/login');
       if (!App.state.user) {
-        document.getElementById('app').innerHTML = '<div class="boot"><div class="spinner"></div></div>';
-        try {
-          const me = await API.call('me');
-          App.state.user = me.user; App.state.counts = me.counts;
+        const cu = API.cachedUser();
+        if (cu) {
+          // Buka seketika dengan profil tersimpan; verifikasi sesi & data terbaru di latar belakang (1 batch)
+          App.state.user = cu; API.setUser(cu);
           startPoll();
-        } catch (e) { if (e.code !== 'AUTH') { toast(e.message, 'error'); } return App.go('#/login'); }
+          bootPrefetch();
+        } else {
+          document.getElementById('app').innerHTML = '<div class="boot"><div class="spinner"></div></div>';
+          try {
+            const me = await API.call('me', {}, { fresh: true });
+            App.state.user = me.user; App.state.counts = me.counts; API.setUser(me.user);
+            startPoll();
+            bootPrefetch();
+          } catch (e) { if (e.code !== 'AUTH') { toast(e.message, 'error'); } return App.go('#/login'); }
+        }
+        idlePreloadLibs();
       }
       return renderApp(parts[1] || 'dashboard', query);
     }
@@ -197,7 +288,9 @@
     try { App.state.counts = await API.call('poll'); updateCounts(); } catch (e) { }
   };
 
-  async function renderApp(page, query) {
+  async function renderApp(page, query, opt) {
+    opt = opt || {};
+    document.querySelectorAll('.fresh-pill').forEach(b => b.remove());
     const def = registry[page];
     const shell = ensureShell();
     shell.classList.remove('nav-open');
@@ -207,15 +300,25 @@
     const el = old.cloneNode(false);
     old.replaceWith(el);
     if (!def) { el.innerHTML = UI.empty('alert', 'Halaman tidak ditemukan.'); return; }
+    App.prefetchRoute(page);
     const roles = def.roles === 'HR' ? HR : def.roles === 'SA' ? SA : ALL;
     if (roles.indexOf(App.state.user.role) < 0) { el.innerHTML = UI.empty('lock', 'Anda tidak memiliki akses ke halaman ini.'); return; }
     document.title = (def.title ? def.title + ' · ' : '') + ((App.state.info || {}).app_name || 'Absenku');
-    el.innerHTML = loading();
-    window.scrollTo(0, 0);
+    if (opt.soft) {
+      // Pembaruan senyap: render ke wadah tersembunyi lalu tukar, agar tidak berkedip
+      el.style.minHeight = old.offsetHeight + 'px';
+    } else window.scrollTo(0, 0);
     const token = (App._renderSeq = (App._renderSeq || 0) + 1);
+    pageActions = new Set();
+    // Skeleton hanya muncul bila data belum ada di cache (render > 150 ms)
+    const skel = opt.soft ? null : setTimeout(() => { if (token === App._renderSeq && !el.firstChild) el.innerHTML = UI.skeleton(); }, 150);
+    if (opt.soft) el.innerHTML = old.innerHTML;
     try {
       await def.render(el, query, () => token === App._renderSeq);
+      clearTimeout(skel);
+      el.style.minHeight = '';
     } catch (e) {
+      clearTimeout(skel);
       if (token !== App._renderSeq) return;
       console.error(e);
       if (e.code === 'AUTH') return;
@@ -245,13 +348,20 @@
         : UI.empty('bell', 'Belum ada notifikasi.');
       box.querySelectorAll('.notif-item').forEach(it => it.onclick = async () => {
         closeDropdowns();
-        if (it.classList.contains('unread')) API.call('readNotif', { id: it.dataset.id }).then(App.refreshCounts).catch(() => { });
+        if (it.classList.contains('unread')) {
+          // Optimistic UI: kurangi badge seketika, sinkron di latar belakang
+          App.state.counts.notif = Math.max(0, (App.state.counts.notif || 0) - 1); updateCounts();
+          API.patch('listNotif', {}, l => l.map(n => n.id === it.dataset.id ? Object.assign(n, { dibaca: true }) : n));
+          API.call('readNotif', { id: it.dataset.id }).catch(() => App.refreshCounts());
+        }
         if (it.dataset.link) App.go(it.dataset.link);
       });
-      dd.querySelector('[data-all]').onclick = async () => {
-        await API.call('readNotif', { id: 'all' }).catch(() => { });
+      dd.querySelector('[data-all]').onclick = () => {
+        // Optimistic UI
         box.querySelectorAll('.unread').forEach(x => x.classList.remove('unread'));
         App.state.counts.notif = 0; updateCounts();
+        API.patch('listNotif', {}, l => l.map(n => Object.assign(n, { dibaca: true })));
+        API.call('readNotif', { id: 'all' }).catch(() => App.refreshCounts());
       };
     } catch (e) { dd.querySelector('.dropdown-list').innerHTML = UI.empty('alert', e.message); }
   }
@@ -326,6 +436,7 @@
   // Landing (publik) — berita & informasi kantor
   // ============================================================
   async function renderLanding() {
+    API.warm();
     const root = document.getElementById('app');
     const info = App.state.info || {};
     root.innerHTML = pubNav('home') +
@@ -338,7 +449,7 @@
     const box = root.querySelector('#berita');
     box.innerHTML = '<div class="section">' + loading('Memuat berita…') + '</div>';
     try {
-      const d = await API.get('getBerita');
+      const d = await API.getSWR('getBerita', {}, nd => { if (!location.hash.replace(/^#\/?/, '')) renderLanding(); });
       setInfo(d.info);
       const tg = root.querySelector('[data-tagline]'); if (tg) tg.textContent = d.info.tagline || '';
       const list = d.berita;
@@ -395,6 +506,7 @@
   // Login
   // ============================================================
   function renderLogin() {
+    API.warm();   // bangunkan server selagi pengguna mengetik
     const info = App.state.info || {};
     const root = document.getElementById('app');
     root.innerHTML = '<div class="login-page"><div class="login-card">' +
@@ -432,11 +544,14 @@
       const btn = form.querySelector('[type=submit]');
       busy(btn, true, 'Memeriksa…');
       try {
-        const r = await API.call('login', d);
+        const r = await API.call('login', Object.assign({ prefetch: true }, d));
         API.setToken(r.token, !!d.remember);
+        API.setUser(r.user);
+        API.seed(r.prefetch);    // dashboard & halaman utama langsung siap dari respons login
         App.state.user = r.user; App.state.counts = { notif: 0, chat: 0, pending: 0 };
         startPoll();
-        App.refreshCounts();
+        bootPrefetch();          // 1 request batch: profil, dashboard, absen hari ini, dst.
+        idlePreloadLibs();
         toast('Selamat datang, ' + r.user.nama + '!');
         App.go('#/app/dashboard');
       } catch (err) { toast(err.message, 'error'); busy(btn, false); pass.select(); }
@@ -456,7 +571,7 @@
       return;
     }
     window.addEventListener('hashchange', route);
-    refreshInfo();
+    if (!API.token()) refreshInfo(); else setTimeout(refreshInfo, 3000);
     route();
   }
   // Error async yang tidak tertangkap → tampilkan sebagai toast (sesi habis ditangani terpisah)
@@ -466,5 +581,14 @@
     if (err.code === 'AUTH') return;
     toast(err.message || 'Terjadi kesalahan tak terduga.', 'error');
   });
+  /** Muat pustaka grafik & peta saat perangkat menganggur, agar halaman berikutnya instan. */
+  function idlePreloadLibs() {
+    const go = () => { UI.need('chart').catch(() => { }); if (!App.isHR() || App.isSA()) UI.need('leaflet').catch(() => { }); };
+    if ('requestIdleCallback' in window) requestIdleCallback(() => setTimeout(go, 1500), { timeout: 6000 }); else setTimeout(go, 3000);
+  }
+  // Service worker: tampilan aplikasi tersimpan di perangkat → dibuka ulang tanpa unduh
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+  }
   document.addEventListener('DOMContentLoaded', start);
 })();

@@ -25,12 +25,19 @@
         '<div class="field"><label>Catatan untuk karyawan ' + (setuju ? '(opsional)' : '(disarankan)') + '</label><textarea class="textarea" data-cat placeholder="' + (setuju ? 'Contoh: Disetujui, semoga lekas sembuh.' : 'Contoh: Mohon ajukan ulang dengan dokumen pendukung.') + '"></textarea></div>',
       foot: '<button class="btn ghost" data-close>Batal</button><button class="btn ' + (setuju ? 'success' : 'danger') + '" data-ok>' + icon(setuju ? 'check' : 'x', 'ico-sm') + ' ' + (setuju ? 'Setujui' : 'Tolak') + '</button>'
     });
-    m.$('[data-ok]').onclick = async () => {
-      const b = m.$('[data-ok]'); busy(b, true);
-      try {
-        const r = await API.call('approveIzin', { id: i.id, keputusan, catatan: m.$('[data-cat]').value }, { full: true });
-        toast(r.message); m.close(); App.refreshCounts(); done && done();
-      } catch (e) { toast(e.message, 'error'); busy(b, false); }
+    m.$('[data-ok]').onclick = () => {
+      // Optimistic UI: dialog tertutup & daftar diperbarui seketika; server menyusul di latar belakang
+      const catatan = m.$('[data-cat]').value;
+      m.close();
+      toast('Pengajuan ' + i.nama + (setuju ? ' disetujui.' : ' ditolak.'));
+      App.state.counts.pending = Math.max(0, (App.state.counts.pending || 0) - 1); App.updateCounts();
+      API.patch('listIzin', { status: 'Menunggu', jenis: 'Semua' }, l => l.filter(x => x.id !== i.id));
+      API.patch('dashHRD', {}, x => { x.pending = Math.max(0, x.pending - 1); x.pengajuan_terbaru = x.pengajuan_terbaru.filter(p => p.id !== i.id); return x; });
+      if (done) done(Object.assign({}, i, { status: keputusan, approver: App.state.user.nama, catatan_approver: catatan }));
+      API.call('approveIzin', { id: i.id, keputusan, catatan }).catch(e => {
+        toast('Gagal memproses pengajuan ' + i.nama + ': ' + e.message, 'error');
+        App.refreshCounts(); App.route();
+      });
     };
   }
 
@@ -51,7 +58,7 @@
       '<div class="stat-foot" style="color:#6EE7B7">' + icon('trend', 'ico-sm') + (d.karyawan_baru > 0 ? '+' + d.karyawan_baru + ' karyawan baru bulan ini' : 'Karyawan aktif') + '</div></div>' +
       '<div class="card stat"><div class="stat-top"><span class="stat-label">Hadir Hari Ini</span><span class="stat-ico green">' + icon('usercheck') + '</span></div><div class="stat-value">' + fmt.num(d.hadir_hari_ini, 0) + '</div>' +
       '<div class="stat-foot up">' + icon('checkc', 'ico-sm') + fmt.num(d.pct_hadir) + '% tingkat kehadiran' + (d.terlambat_hari_ini ? ' · <span class="warn">' + d.terlambat_hari_ini + ' terlambat</span>' : '') + '</div></div>' +
-      '<a class="card stat" href="#/app/persetujuan" style="color:inherit;text-decoration:none"><div class="stat-top"><span class="stat-label">Pengajuan Pending</span><span class="stat-ico amber">' + icon('calcheck') + '</span></div><div class="stat-value">' + d.pending + '</div>' +
+      '<a class="card stat" href="#/app/persetujuan" style="color:inherit;text-decoration:none"><div class="stat-top"><span class="stat-label">Pengajuan Pending</span><span class="stat-ico amber">' + icon('calcheck') + '</span></div><div class="stat-value" data-pending-val>' + d.pending + '</div>' +
       '<div class="stat-foot ' + (d.pending ? 'warn' : 'up') + '">' + icon(d.pending ? 'clock' : 'checkc', 'ico-sm') + (d.pending ? 'Perlu tindakan segera' : 'Semua pengajuan sudah diproses') + '</div></a>' +
       '<a class="card stat" href="#/app/sp" style="color:inherit;text-decoration:none"><div class="stat-top"><span class="stat-label">SP Bulan Ini</span><span class="stat-ico red">' + icon('alert') + '</span></div><div class="stat-value">' + d.sp_bulan_ini + '</div>' +
       '<div class="stat-foot ' + (sel > 0 ? 'down' : 'up') + '">' + (sel === 0 ? 'Sama dengan bulan lalu' : (sel > 0 ? '▲ +' : '▼ ') + sel + ' dari bulan lalu') + '</div></a>' +
@@ -82,7 +89,10 @@
       '</div></div>';
     el.innerHTML = embedded ? el.innerHTML + html : html;
 
-    el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => approveDialog(d.pengajuan_terbaru[+b.dataset.ap], b.dataset.k, () => App.route()));
+    el.querySelectorAll('[data-ap]').forEach(b => b.onclick = () => approveDialog(d.pengajuan_terbaru[+b.dataset.ap], b.dataset.k, () => {
+      const tr = b.closest('tr'); if (tr) { tr.style.transition = 'opacity .2s'; tr.style.opacity = '0'; setTimeout(() => tr.remove(), 200); }
+      const pv = el.querySelector('[data-pending-val]'); if (pv) pv.textContent = Math.max(0, (+pv.textContent || 0) - 1);
+    }));
     const c = colors();
     UI.chart(el.querySelector('[data-week]'), {
       type: 'bar',
@@ -183,7 +193,10 @@
       el.querySelector('[data-cari]').oninput = UI.debounce(e => { cari = e.target.value.toLowerCase(); draw(); }, 200);
       box.addEventListener('click', async e => {
         const a = e.target.closest('[data-ap]'), l = e.target.closest('[data-lamp]');
-        if (a) approveDialog(rows.find(x => x.id === a.dataset.ap), a.dataset.k, load);
+        if (a) approveDialog(rows.find(x => x.id === a.dataset.ap), a.dataset.k, upd => {
+          rows = status === 'Menunggu' ? rows.filter(x => x.id !== upd.id) : rows.map(x => x.id === upd.id ? upd : x);
+          draw();
+        });
         if (l) { busy(l, true); try { UI.viewFile(await API.call('getLampiran', { id: l.dataset.lamp }), 'Lampiran pengajuan'); } catch (err) { toast(err.message, 'error'); } busy(l, false); }
       });
       load();
@@ -330,6 +343,7 @@
   // KPI SELURUH KARYAWAN
   // ============================================================
   Pages.register('kpi-karyawan', {
+    autoRefresh: true,
     title: 'KPI Karyawan', roles: 'HR',
     async render(el, q, alive) {
       const periode = q.p || UI.periodeNow();
@@ -446,7 +460,10 @@
         const v = e.target.closest('[data-view]'), ed = e.target.closest('[data-edit]'), dl = e.target.closest('[data-del]');
         if (v) { const g = rows.find(x => x.id === v.dataset.view); PageKit.previewSlip(g.id, 'Slip Gaji — ' + g.nama + ' · ' + fmt.periode(g.periode)); setTimeout(() => load(), 8000); }
         if (ed) gajiForm(rows.find(x => x.id === ed.dataset.edit), karyawan, periode, () => load());
-        if (dl && await UI.confirm('Hapus data gaji ini?', { danger: true, ok: 'Hapus' })) { try { const r = await API.call('deleteGaji', { id: dl.dataset.del }, { full: true }); toast(r.message); load(); } catch (err) { toast(err.message, 'error'); } }
+        if (dl && await UI.confirm('Hapus data gaji ini?', { danger: true, ok: 'Hapus' })) {
+          const id = dl.dataset.del; rows = rows.filter(x => x.id !== id); draw(); toast('Data gaji dihapus.');
+          API.call('deleteGaji', { id }).catch(err => { toast(err.message, 'error'); load(); });
+        }
       });
       draw();
     }
@@ -600,7 +617,10 @@
       box.addEventListener('click', async e => {
         const ed = e.target.closest('[data-edit]'), dl = e.target.closest('[data-del]');
         if (ed) beritaForm(rows.find(b => b.id === ed.dataset.edit), reload);
-        if (dl && await UI.confirm('Hapus berita ini secara permanen?', { danger: true, ok: 'Hapus' })) { try { const r = await API.call('deleteBerita', { id: dl.dataset.del }, { full: true }); toast(r.message); reload(); } catch (err) { toast(err.message, 'error'); } }
+        if (dl && await UI.confirm('Hapus berita ini secara permanen?', { danger: true, ok: 'Hapus' })) {
+          const id = dl.dataset.del; rows = rows.filter(b => b.id !== id); draw(); toast('Berita dihapus.');
+          API.call('deleteBerita', { id }).catch(err => { toast(err.message, 'error'); reload(); });
+        }
       });
       draw();
     }
@@ -708,9 +728,9 @@
     out.querySelector('[data-print]').onclick = () => window.print();
     out.querySelector('[data-pdf]').onclick = async e => {
       const b = e.currentTarget;
-      if (!window.html2pdf) return toast('Pustaka PDF belum termuat. Gunakan tombol Cetak → Simpan sebagai PDF.', 'warning');
       busy(b, true, 'Membuat PDF…');
       try {
+        try { await UI.need('html2pdf'); } catch (e) { busy(b, false); return toast('Pustaka PDF gagal dimuat. Gunakan tombol Cetak → Simpan sebagai PDF.', 'warning'); }
         const sheet = out.querySelector('[data-sheet]');
         const opt = { margin: [8, 8, 10, 8], filename: nama, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
           jsPDF: { unit: 'mm', format: 'a4', orientation: d.jenis === 'absensi' || d.jenis === 'kpi' ? 'landscape' : 'portrait' }, pagebreak: { mode: ['avoid-all', 'css'] } };

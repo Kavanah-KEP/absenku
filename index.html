@@ -6,26 +6,25 @@
   <meta name="theme-color" content="#1E3A8A">
   <meta name="description" content="Absenku — sistem manajemen kehadiran & HRD terintegrasi: absensi selfie + GPS, izin & cuti, KPI, slip gaji, dan surat peringatan.">
   <title>Absenku</title>
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%231E3A8A'/%3E%3Cpath d='M7 11a5 5 0 0 1 10 0v2M12 11v4a6 6 0 0 1-1.5 4M9 21c1-1.5 1-3 1-5v-5a2 2 0 0 1 4 0' stroke='white' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 
-  <!-- Font default (font lain dimuat otomatis sesuai pengaturan tema) -->
+  <!-- Sambungan ke server dibuka lebih awal (hemat ±300 ms di HP) -->
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 
-  <!-- Peta (Leaflet + OpenStreetMap) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <!-- Font tidak memblokir tampilan: teks langsung muncul dengan font sistem, lalu berganti -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        onload="this.onload=null;this.rel='stylesheet'">
 
   <link rel="stylesheet" href="css/style.css">
+  <!-- Grafik, peta & PDF dimuat otomatis hanya di halaman yang membutuhkannya (lihat UI.need di js/ui.js) -->
 </head>
 <body>
   <div id="app"><div class="boot"><div class="spinner" role="status" aria-label="Memuat"></div></div></div>
   <noscript><p style="padding:24px;text-align:center">Aplikasi ini membutuhkan JavaScript. Aktifkan JavaScript di browser Anda.</p></noscript>
-
-  <!-- Pustaka pihak ketiga (aplikasi tetap berjalan bila salah satu gagal dimuat) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" defer></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 
   <!-- Aplikasi (urutan penting) -->
   <script src="js/config.js" defer></script>

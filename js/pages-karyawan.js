@@ -16,6 +16,7 @@
   // DASHBOARD (bercabang sesuai role)
   // ============================================================
   Pages.register('dashboard', {
+    autoRefresh: true,
     title: 'Dashboard', roles: 'ALL',
     async render(el, q, alive) {
       if (App.isSA()) return window.HRView.superadmin(el, alive);
@@ -102,7 +103,7 @@
     async render(el, q, alive) {
       const d = await API.call('getAbsenToday');
       if (!alive()) return;
-      const offset = new Date(d.server_time).getTime() - Date.now();
+      const offset = new Date(d.server_time).getTime() - (d._at || Date.now());
       const a = d.absen;
       const tipe = !a ? 'masuk' : !a.jam_pulang ? 'pulang' : 'selesai';
       const wfh = d.mode_kerja === 'WFH';
@@ -184,7 +185,7 @@
       cam.onchange = async () => {
         const f = cam.files[0]; if (!f) return;
         try {
-          st.foto = await UI.fileToDataUrl(f, window.APP_CONFIG.FOTO_MAX_PX || 900, 0.8);
+          st.foto = await UI.fileToDataUrl(f, window.APP_CONFIG.FOTO_MAX_PX || 720, 0.72);
           st.fotoOk = false;
           frame.innerHTML = '<img src="' + st.foto + '" alt="Pratinjau selfie"><span class="selfie-badge">Pratinjau — periksa wajah terlihat jelas</span>';
           drawCam(); refresh();
@@ -195,7 +196,9 @@
       // ---- Peta
       let map = null, meMarker = null, meCircle = null;
       const mapEl = el.querySelector('[data-map]');
-      if (window.L) {
+      const buildMap = () => {
+        if (!mapEl.isConnected) return;
+        mapEl.innerHTML = '';
         const first = d.lokasi[0];
         map = L.map(mapEl, { zoomControl: true, attributionControl: true }).setView(first ? [first.lat, first.lng] : [-2.5, 118], first ? 16 : 5);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -206,7 +209,11 @@
         });
         App.onLeave(() => { try { map.remove(); } catch (e) { } });
         setTimeout(() => map.invalidateSize(), 200);
-      } else mapEl.innerHTML = '<div class="empty">' + icon('pin') + 'Peta tidak dapat dimuat.</div>';
+        if (st.pos) drawMe();
+      };
+      mapEl.innerHTML = '<div class="empty small"><span class="spinner sm"></span>Memuat peta…</div>';
+      // Peta dimuat setelah jam, kamera & GPS sudah siap — absen tidak perlu menunggu peta
+      UI.need('leaflet').then(buildMap).catch(() => { if (mapEl.isConnected) mapEl.innerHTML = '<div class="empty">' + icon('pin') + 'Peta tidak dapat dimuat. Absen tetap bisa dilakukan.</div>'; });
 
       // ---- GPS
       const geo = el.querySelector('[data-geo]');
@@ -226,7 +233,12 @@
         }
         geo.innerHTML = '<div class="row between mb">' + '<span>Status Geofence</span>' + status + '</div>' + place +
           '<div class="small mt-sm" style="color:var(--interactive)">' + icon('nav', 'ico-sm') + ' Akurasi GPS: ' + st.pos.acc + ' meter (' + accLbl + ')</div>';
-        if (map) {
+        drawMe();
+        refresh();
+      };
+      function drawMe() {
+        if (map && st.pos) {
+          const best = st.near;
           const ll = [st.pos.lat, st.pos.lng];
           if (!meMarker) {
             meMarker = L.circleMarker(ll, { radius: 8, color: '#fff', weight: 3, fillColor: '#DC2626', fillOpacity: 1 }).addTo(map).bindTooltip('Posisi Anda');
@@ -235,8 +247,7 @@
             map.fitBounds(L.latLngBounds(pts).pad(0.6), { maxZoom: 17 });
           } else { meMarker.setLatLng(ll); meCircle.setLatLng(ll).setRadius(st.pos.acc); }
         }
-        refresh();
-      };
+      }
       const onErr = e => {
         const msg = e.code === 1 ? 'Izin lokasi ditolak. Aktifkan izin lokasi untuk situs ini di pengaturan browser.' : e.code === 3 ? 'GPS terlalu lama merespons. Pastikan GPS aktif dan coba di area terbuka.' : 'Lokasi tidak dapat dibaca. Aktifkan GPS HP Anda.';
         geo.innerHTML = '<div class="alert red">' + icon('alert') + '<div>' + esc(msg) + '<div class="mt-sm"><button class="btn sm ghost" data-retry>' + icon('refresh', 'ico-sm') + ' Coba lagi</button></div></div></div>';
@@ -270,6 +281,8 @@
         try {
           const r = await API.call('submitAbsen', { tipe: tipe, lat: st.pos.lat, lng: st.pos.lng, akurasi: st.pos.acc, foto: st.foto }, { full: true });
           toast(r.message, r.data && r.data.status === 'Terlambat' && tipe === 'masuk' ? 'warning' : 'success');
+          API.patch('getAbsenToday', {}, x => { x.absen = r.data; return x; });
+          API.patch('dashKaryawan', {}, x => { x.absen_hari_ini = r.data; return x; });
           App.route();
         } catch (e) { toast(e.message, 'error'); st.sending = false; busy(btn, false); refresh(); }
       };
@@ -350,7 +363,11 @@
         const l = e.target.closest('[data-lamp]'), c = e.target.closest('[data-cancel]');
         if (l) { busy(l, true); try { UI.viewFile(await API.call('getLampiran', { id: l.dataset.lamp }), 'Lampiran'); } catch (err) { toast(err.message, 'error'); } busy(l, false); }
         if (c && await UI.confirm('Batalkan pengajuan ini?', { danger: true, ok: 'Batalkan' })) {
-          try { const r = await API.call('cancelIzin', { id: c.dataset.cancel }, { full: true }); toast(r.message); App.route(); } catch (err) { toast(err.message, 'error'); }
+          // Optimistic UI: status berubah seketika, server menyusul
+          const tr = c.closest('tr'); const cell = tr && tr.children[3];
+          if (cell) cell.innerHTML = badge('Dibatalkan'); c.remove();
+          toast('Pengajuan dibatalkan.');
+          API.call('cancelIzin', { id: c.dataset.cancel }).catch(err => { toast(err.message, 'error'); App.route(); });
         }
       });
     }
@@ -360,6 +377,7 @@
   // KPI SAYA
   // ============================================================
   Pages.register('kpi', {
+    autoRefresh: true,
     title: 'KPI Saya', roles: 'ALL',
     async render(el, q, alive) {
       const periode = q.p || UI.periodeNow();
@@ -421,6 +439,7 @@
   window.PageKit.previewSlip = previewSlip;
 
   Pages.register('slip', {
+    autoRefresh: true,
     title: 'Slip Gaji', roles: 'ALL',
     async render(el, q, alive) {
       const list = await API.call('mySlip');
@@ -443,6 +462,7 @@
   // SURAT PERINGATAN SAYA
   // ============================================================
   Pages.register('sp-saya', {
+    autoRefresh: true,
     title: 'Surat Peringatan', roles: 'ALL',
     async render(el, q, alive) {
       const list = await API.call('mySP');
@@ -472,7 +492,7 @@
       lastDay = day;
       const me = m.dari === meSide;
       return sep + '<div class="bubble ' + (me ? 'me' : 'them') + '">' + (!me && meSide === 'KARYAWAN' ? '<div class="xs bold" style="color:var(--interactive)">' + esc(m.pengirim) + '</div>' : '') + esc(m.pesan) +
-        '<div class="meta">' + esc(String(m.timestamp).slice(11, 16)) + (me && meSide === 'HRD' ? ' · ' + esc(m.pengirim) : '') + '</div></div>';
+        '<div class="meta">' + (m.pending ? '⏳ ' : '') + esc(String(m.timestamp).slice(11, 16)) + (me && meSide === 'HRD' ? ' · ' + esc(m.pengirim) : '') + '</div></div>';
     }).join('') : '<div class="empty" style="margin:auto">' + icon('message') + '<div>Belum ada pesan. Mulai percakapan!</div></div>';
     box.scrollTop = box.scrollHeight;
   }
@@ -485,11 +505,13 @@
       '<form class="chat-input"><textarea class="textarea" rows="1" placeholder="Tulis pesan…" aria-label="Pesan"></textarea><button class="btn" type="submit" aria-label="Kirim">' + icon('send') + '</button></form>';
     const box = container.querySelector('.chat-msgs'), form = container.querySelector('form'), ta = form.querySelector('textarea');
     if (opt.onBack) container.querySelector('[data-back]').onclick = opt.onBack;
-    let sig = '', stopped = false;
+    let sig = '', stopped = false, first = true, msgs = [];
     const load = async () => {
       try {
-        const d = await API.call('chatMessages', opt.karyawan_id ? { karyawan_id: opt.karyawan_id } : {});
+        const d = await API.call('chatMessages', opt.karyawan_id ? { karyawan_id: opt.karyawan_id } : {}, { fresh: !first });
+        first = false;
         if (stopped) return;
+        msgs = d.pesan;
         const s = d.pesan.length + ':' + (d.pesan.length ? d.pesan[d.pesan.length - 1].id : '');
         if (s !== sig) { sig = s; renderMsgs(box, d.pesan, opt.side); }
       } catch (e) { if (!sig) box.innerHTML = empty('alert', e.message); }
@@ -502,12 +524,20 @@
     form.onsubmit = async e => {
       e.preventDefault();
       const pesan = ta.value.trim(); if (!pesan) return;
-      const btn = form.querySelector('button'); busy(btn, true);
+      // Optimistic UI: gelembung pesan langsung muncul, dikirim di latar belakang
+      ta.value = ''; ta.focus();
+      const now = new Date(), pad = n => String(n).padStart(2, '0');
+      const ts = UI.isoDate(now) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+      const temp = { id: 'tmp' + Date.now(), dari: opt.side, pengirim: App.state.user.nama, pesan: pesan, timestamp: ts, pending: true };
+      msgs = msgs.concat([temp]);
+      renderMsgs(box, msgs, opt.side);
       try {
         await API.call('sendChat', Object.assign({ pesan }, opt.karyawan_id ? { karyawan_id: opt.karyawan_id } : {}));
-        ta.value = ''; sig = ''; await load(); if (opt.onSent) opt.onSent();
-      } catch (err) { toast(err.message, 'error'); }
-      busy(btn, false); ta.focus();
+        sig = ''; load(); if (opt.onSent) opt.onSent();
+      } catch (err) {
+        toast('Pesan gagal terkirim: ' + err.message, 'error');
+        msgs = msgs.filter(m => m !== temp); renderMsgs(box, msgs, opt.side); ta.value = pesan;
+      }
     };
     return { stop, reload: load };
   }

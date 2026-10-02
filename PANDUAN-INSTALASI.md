@@ -48,6 +48,12 @@ Urutannya wajib: **backend dulu** (untuk mendapatkan URL `/exec`), **baru fronte
 
 **Uji cepat:** buka URL `/exec` tadi di browser dengan tambahan `?action=ping` di belakangnya. Harus tampil teks JSON `{"success":true,...}`.
 
+### A5. Pasang "penjaga server tetap hangat" (sekali saja — sangat disarankan)
+Apps Script "tertidur" bila lama tidak dipakai, sehingga permintaan pertama (misalnya absen jam 07.30) bisa lambat 3–5 detik.
+1. Di editor, pilih fungsi **pasangTriggerKeepWarm** → **▶ Run** → izinkan bila diminta.
+2. Log harus menampilkan **✅ Trigger keepWarm terpasang (setiap 5 menit)**.
+   > Trigger ini juga mengisi cache data utama, sehingga semua pengguna mendapat respons lebih cepat.
+
 ---
 
 ## BAGIAN B — Frontend (GitHub Pages)
@@ -59,6 +65,8 @@ Urutannya wajib: **backend dulu** (untuk mendapatkan URL `/exec`), **baru fronte
    ├── index.html           ← harus langsung terlihat di sini
    ├── README.md
    ├── PANDUAN-INSTALASI.md
+   ├── sw.js                ← penyimpan tampilan di HP (wajib ikut di-push)
+   ├── manifest.webmanifest
    ├── css/style.css
    └── js/ (config.js, api.js, ui.js, app.js, pages-*.js)
    ```
@@ -168,6 +176,34 @@ Tunggu 1–2 menit, lalu **Ctrl+Shift+R** (hard refresh) di browser.
 **Deploy → Manage deployments → ✏️ (Edit) → Version: New version → Deploy.**
 > Jangan pakai "New deployment" lagi — itu menghasilkan URL baru dan frontend harus diubah.
 
+**Catatan service worker:** setelah push, HP yang sudah pernah membuka aplikasi akan memakai versi baru pada **pembukaan berikutnya** (pembukaan pertama masih versi lama dari cache, lalu diperbarui diam-diam). Jika ingin memaksa semua perangkat langsung memuat ulang total, ubah `VERSION` di `sw.js` (misal `absenku-v3`) sebelum push.
+
+---
+
+## BAGIAN E — Upgrade dari versi sebelumnya (Instant UX)
+
+Jika Anda sudah memasang versi pertama:
+1. **Backend:** buka Apps Script → ganti seluruh isi `Kode.gs` dengan versi baru → Ctrl+S → **Deploy → Manage deployments → ✏️ → Version: New version → Deploy** (URL `/exec` tetap sama, tidak perlu mengubah `config.js`).
+2. Jalankan **pasangTriggerKeepWarm** sekali (Bagian A5). **Jangan** jalankan `setupAppEnvironment` lagi.
+3. **Frontend:** ekstrak ZIP baru, **salin `GAS_URL` dari `js/config.js` lama Anda** ke `js/config.js` baru, lalu timpa isi folder `absenku-frontend` Anda dengan isi ZIP baru dan push:
+   ```bash
+   git add .
+   git commit -m "Upgrade instant UX"
+   git push
+   ```
+
+### Apa yang membuat aplikasi terasa instan
+| Teknik | Efek |
+|---|---|
+| Cache data di perangkat (stale-while-revalidate) | Pindah menu ±20 ms; data diperbarui diam-diam di belakang |
+| Prefetch per role + data awal ikut di respons login | Dashboard, absensi, izin, KPI, slip sudah siap sebelum diklik |
+| Prefetch saat jari menyentuh menu | Halaman yang belum pernah dibuka pun dimuat lebih awal |
+| Optimistic UI | Setujui/tolak, kirim chat, batal izin, tandai notifikasi, hapus → langsung berubah |
+| Pustaka grafik/peta/PDF dimuat saat dibutuhkan + service worker | Pembukaan ulang di HP ±0,1 detik |
+| CacheService untuk semua tabel + batch request + keepWarm | Respons server lebih cepat & stabil di jam sibuk |
+
+> Data gaji, slip, dan BPJS **hanya** disimpan di memori (tidak ditulis ke penyimpanan HP), dan semua cache dihapus saat **Keluar**. Di HP yang dipakai bersama, biasakan menekan Keluar.
+
 ---
 
 ## Troubleshooting
@@ -183,7 +219,8 @@ Tunggu 1–2 menit, lalu **Ctrl+Shift+R** (hard refresh) di browser.
 | "Di luar radius" padahal di kantor | Titik kantor kurang tepat atau radius terlalu kecil → perbarui di Pengaturan → Lokasi Kantor |
 | Perubahan backend tidak berlaku | Belum membuat **New version** di Manage deployments (Bagian D) |
 | Server "sibuk" saat jam absen pagi | Kuota GAS: jumlah eksekusi serentak terbatas (±30). Minta karyawan mengulang beberapa detik kemudian; untuk >300 karyawan pertimbangkan membagi jam masuk |
-| Tampilan versi lama setelah push | Cache browser → **Ctrl+Shift+R** atau jendela Incognito |
+| Tampilan versi lama setelah push | Service worker: tutup lalu buka lagi aplikasinya (versi baru aktif pada pembukaan berikutnya), atau **Ctrl+Shift+R** / Incognito |
+| Data terasa belum terbaru | Tunggu sebentar — data disegarkan otomatis; di halaman daftar akan muncul tombol **"Ada data terbaru · Muat ulang"** |
 
 ---
 

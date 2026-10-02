@@ -131,7 +131,8 @@
                 '<div class="actions"><button class="icon-btn" data-edit="' + esc(l.id) + '">' + icon('edit', 'ico-sm') + '</button><button class="icon-btn no" data-del="' + esc(l.id) + '">' + icon('trash', 'ico-sm') + '</button></div></div>').join('') + '</div>'
                 : empty('pin', 'Belum ada lokasi kantor. Tambahkan agar karyawan WFO dapat absen.')) + '</div>' +
               '<div class="card"><div class="card-head"><h3>Peta Geofence</h3></div><div class="map tall" data-map></div><p class="xs muted mt-sm">Saran radius 50–150 m untuk mengakomodasi akurasi GPS HP.</p></div></div>';
-            if (window.L && d.lokasi.length) {
+            if (d.lokasi.length) UI.need('leaflet').then(() => {
+              if (!body.querySelector('[data-map]')) return;
               const map = L.map(body.querySelector('[data-map]'));
               L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
               let bounds = null;
@@ -143,7 +144,8 @@
               map.fitBounds(bounds.pad(0.4), { maxZoom: 17 });
               setTimeout(() => map.invalidateSize(), 200);
               App.onLeave(() => { try { map.remove(); } catch (e) { } });
-            } else if (!d.lokasi.length) body.querySelector('[data-map]').innerHTML = empty('pin', 'Belum ada lokasi.');
+            }).catch(() => { const me = body.querySelector('[data-map]'); if (me) me.innerHTML = empty('pin', 'Peta tidak dapat dimuat.'); });
+            else body.querySelector('[data-map]').innerHTML = empty('pin', 'Belum ada lokasi.');
             body.querySelector('[data-add]').onclick = () => lokasiForm(null);
             body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => lokasiForm(d.lokasi.find(l => l.id === b.dataset.edit)));
             body.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
@@ -174,7 +176,8 @@
               mk.setLatLng([la, lo]); ci.setLatLng([la, lo]).setRadius(r);
               if (fit) map.fitBounds(L.latLng(la, lo).toBounds(r * 2).pad(0.5), { maxZoom: 18 });
             };
-            if (window.L) {
+            UI.need('leaflet').then(() => {
+              if (!m.$('[data-map]')) return;
               setTimeout(() => {
                 map = L.map(m.$('[data-map]')).setView(l.lat !== '' ? [l.lat, l.lng] : [-2.5, 118], l.lat !== '' ? 17 : 5);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -182,7 +185,7 @@
                 sync(true);
                 setTimeout(() => map.invalidateSize(), 250);
               }, 60);
-            }
+            }).catch(() => { const me = m.$('[data-map]'); if (me) me.innerHTML = empty('pin', 'Peta tidak dapat dimuat — isi koordinat secara manual.'); });
             f.addEventListener('input', UI.debounce(() => sync(), 300));
             m.$('[data-here]').onclick = e => {
               const b = e.currentTarget; busy(b, true);

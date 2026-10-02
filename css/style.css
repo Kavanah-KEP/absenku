@@ -527,3 +527,32 @@ p { margin: 0; }
   .shell { display: block; } .content { padding: 0; }
   .report-sheet { border: 0; max-width: none; }
 }
+
+/* ---------- 11. Instant UX ---------- */
+/* Tap terasa instan di HP (tanpa jeda double-tap zoom & tanpa kilatan biru) */
+a, button, .btn, .tab, .chip, .nav-link, .icon-btn, .theme-card, .font-card, .news-card, .chat-thread, .notif-item, label.check {
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.btn:active, .nav-link:active, .bottom-nav a:active, .icon-btn:active { transform: scale(.97); }
+/* Halaman muncul halus, tanpa menunggu */
+#page > * { animation: pageIn .16s ease-out; }
+@keyframes pageIn { from { opacity: .4; transform: translateY(3px); } }
+.skel-page { display: grid; gap: 12px; }
+.skel-page .card { padding: 20px; }
+/* Pemberitahuan data terbaru */
+.fresh-pill {
+  position: fixed; left: 50%; transform: translateX(-50%); top: 84px; z-index: 900;
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 99px; border: 0;
+  background: var(--primary); color: #fff; font-weight: 600; font-size: 13px; box-shadow: var(--shadow-lg); cursor: pointer;
+  animation: toastIn .25s ease;
+}
+[data-theme="gelap"] .fresh-pill { color: #18181B; }
+@media (max-width: 1024px) {
+  /* Efek blur mahal di HP kelas menengah → latar solid */
+  .topbar, .pub-nav { backdrop-filter: none; background: var(--bg); }
+  .pub-nav { background: var(--surface); }
+  .fresh-pill { top: 72px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #page > *, .modal, .modal-back, .toast { animation: none !important; }
+}
