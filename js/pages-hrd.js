@@ -524,7 +524,7 @@
       const [karyawan, list] = await Promise.all([daftarKaryawan(), API.call('listSP')]);
       if (!alive()) return;
       el.innerHTML = head('Surat Peringatan', 'Terbitkan SP1/SP2/SP3 resmi dalam PDF. Karyawan menerima notifikasi dan dapat mengunduh suratnya.') +
-        '<div class="grid g-main-r" style="grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)">' +
+        '<div class="grid g-side g-side-15">' +
         '<form class="card" data-f><div class="card-head"><div class="card-title-ico">' + icon('alert', 'ico-lg') + '<h3>Buat Surat Peringatan</h3></div></div><div class="stack" style="gap:14px">' +
         '<div class="field"><label>Karyawan</label><select class="select" name="karyawan_id">' + optKaryawan(karyawan.filter(k => k.id !== App.state.user.karyawan_id), '', '— Pilih karyawan —') + '</select></div>' +
         '<div data-riw></div>' +
@@ -700,7 +700,7 @@
     out.innerHTML = '<div class="card no-print"><div class="row between wrap"><div><b>Pratinjau siap.</b> <span class="muted small">Periksa isi laporan di bawah sebelum mengunduh.</span></div>' +
       '<div class="row wrap"><label class="check small"><input type="checkbox" data-drive checked> Simpan salinan ke Google Drive</label><button class="btn ghost" data-print>' + icon('printer', 'ico-sm') + ' Cetak</button><button class="btn" data-pdf>' + icon('download', 'ico-sm') + ' Unduh PDF</button></div></div></div>' +
       '<div class="mt" style="overflow-x:auto"><div class="report-sheet" data-sheet>' +
-      '<div class="rh">' + (info.logo_url ? '<img src="' + esc(info.logo_url) + '" crossorigin="anonymous" alt="" onerror="this.remove()">' : '') + '<div style="flex:1"><h2>' + esc(judul) + '</h2><div style="font-size:12px;color:#64748B">' + esc(info.perusahaan || '') + ' · ' + esc(info.alamat || '') + '</div></div>' +
+      '<div class="rh">' + (info.logo_url ? '<img src="' + esc(info.logo_url) + '" crossorigin="anonymous" alt="" data-err="remove">' : '') + '<div style="flex:1"><h2>' + esc(judul) + '</h2><div style="font-size:12px;color:#64748B">' + esc(info.perusahaan || '') + ' · ' + esc(info.alamat || '') + '</div></div>' +
       '<div style="text-align:right;font-size:12px"><b>Periode</b><br>' + esc(periode) + '</div></div>' + body +
       '<div class="rf">Dibuat oleh ' + esc(App.state.user.nama) + ' melalui ' + esc(info.app_name || 'Absenku') + ' pada ' + esc(new Date().toLocaleString('id-ID')) + '.</div></div></div>';
 

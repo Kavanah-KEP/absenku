@@ -556,3 +556,11 @@ a, button, .btn, .tab, .chip, .nav-link, .icon-btn, .theme-card, .font-card, .ne
 @media (prefers-reduced-motion: reduce) {
   #page > *, .modal, .modal-back, .toast { animation: none !important; }
 }
+
+/* ---------- 12. Grid dua kolom (kiri lebih sempit) — bertumpuk di tablet/HP ---------- */
+.g-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+.g-side-13 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+.g-side-15 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
+.g-side-16 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+.g-side-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+@media (max-width: 1200px) { .g-side, .g-side-13, .g-side-15, .g-side-16, .g-side-2 { grid-template-columns: minmax(0, 1fr); } }

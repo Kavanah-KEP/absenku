@@ -13,7 +13,11 @@ js/ui.js              Ikon, format, modal, toast, grafik, kalender
 js/app.js             Router, layout, notifikasi, landing berita, login
 js/pages-karyawan.js  Dashboard, Absensi, Izin/Cuti/Lembur, KPI, Slip, SP, Chat, Profil
 js/pages-hrd.js       Dashboard HR/Superadmin, Persetujuan, Rekap, Karyawan, KPI, Gaji, BPJS, SP, Berita, Laporan
-js/pages-admin.js     Pengaturan (branding, tema, jam kerja, lokasi) & Akun (Superadmin)
+js/pages-admin.js     Pengaturan (branding, tema, jam kerja, lokasi) & Akun & Akses
+manifest.webmanifest  Identitas aplikasi untuk instalasi / PWABuilder (ikon, warna, screenshot)
+sw.js · offline.html  Service worker (buka cepat & halaman offline)
+icons/ · screenshots/ Ikon PNG (biasa & maskable) dan screenshot untuk instalasi
+.gitignore            Pengaman: kunci APK/keystore tidak bisa ter-upload ke GitHub
 ```
 
 ## Fitur per role
@@ -28,4 +32,4 @@ js/pages-admin.js     Pengaturan (branding, tema, jam kerja, lokasi) & Akun (Sup
 | Pengaturan logo, nama, tema, font, jam kerja, lokasi | | ✅ | ✅ |
 | Kelola akun HRD/Admin HRD (tambah/nonaktifkan) | | | ✅ |
 
-Panduan lengkap: **PANDUAN-INSTALASI.md**.
+Panduan lengkap: **PANDUAN-INSTALASI.md** · Membuat APK Android: **PANDUAN-APK.md**.

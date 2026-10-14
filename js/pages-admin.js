@@ -44,7 +44,7 @@
         // ---------- Branding
         branding() {
           let logo = null;
-          body.innerHTML = '<div class="grid g-main-r" style="grid-template-columns:minmax(0,1fr) minmax(0,1.6fr)">' +
+          body.innerHTML = '<div class="grid g-side g-side-16">' +
             '<div class="card"><div class="card-head"><h3>Logo Aplikasi</h3></div><div class="row" style="align-items:flex-start;gap:18px"><div class="logo-preview" data-lp>' + (s.LOGO_URL ? '<img src="' + esc(s.LOGO_URL) + '" alt="Logo">' : icon('image', 'ico-lg')) + '</div>' +
             '<div class="stack" style="gap:8px;flex:1"><input type="file" accept="image/png,image/jpeg" class="sr-only" data-file><button class="btn ghost" data-pick>' + icon('upload', 'ico-sm') + ' Pilih logo (PNG/JPG)</button>' +
             '<button class="btn hidden" data-up>' + icon('save', 'ico-sm') + ' Simpan logo</button>' + (s.LOGO_URL ? '<button class="btn sm ghost" data-rm style="color:var(--danger)">Hapus logo</button>' : '') +

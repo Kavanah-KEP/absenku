@@ -312,7 +312,7 @@
         '<div class="card stat" style="min-height:0"><div class="stat-top"><span class="stat-label">Sisa Cuti Tahunan</span><span class="stat-ico">' + icon('calcheck') + '</span></div><div class="stat-value">' + d.cuti.sisa + ' <small>dari ' + d.cuti.kuota + ' hari</small></div><div class="progress"><span style="width:' + (d.cuti.kuota ? d.cuti.sisa / d.cuti.kuota * 100 : 0) + '%"></span></div></div>' +
         '<div class="card stat" style="min-height:0"><div class="stat-top"><span class="stat-label">Cuti Terpakai</span><span class="stat-ico cyan">' + icon('calendar') + '</span></div><div class="stat-value">' + d.cuti.terpakai + ' <small>hari</small></div><div class="muted small">Termasuk yang masih menunggu persetujuan</div></div>' +
         '<div class="card stat" style="min-height:0"><div class="stat-top"><span class="stat-label">Menunggu Persetujuan</span><span class="stat-ico amber">' + icon('clock') + '</span></div><div class="stat-value">' + pending + ' <small>pengajuan</small></div><div class="muted small">Anda akan mendapat notifikasi saat diproses</div></div>' +
-        '</div><div class="grid g-main-r" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)">' +
+        '</div><div class="grid g-side g-side-13">' +
         '<form class="card" data-form novalidate><div class="card-head"><h3>Form Pengajuan</h3></div><div class="form-grid">' +
         '<div class="field full"><label>Jenis Pengajuan</label><select class="select" name="jenis">' + UI.options(JENIS) + '</select></div>' +
         '<div class="field" data-f="mulai"><label data-lbl-mulai>Tanggal Mulai</label><input class="input" type="date" name="tanggal_mulai" value="' + today + '" required></div>' +
@@ -389,7 +389,7 @@
       const predikat = k.skor_akhir === null ? 'Belum ada data' : k.skor_akhir >= 90 ? 'Sangat Baik' : k.skor_akhir >= 80 ? 'Baik' : k.skor_akhir >= 70 ? 'Cukup' : 'Perlu Perbaikan';
       const mini = (lbl, val, sub, ic, cls) => '<div class="card stat" style="min-height:0"><div class="stat-top"><span class="stat-label">' + lbl + '</span><span class="stat-ico ' + (cls || '') + '">' + icon(ic) + '</span></div><div class="stat-value" style="font-size:28px">' + val + '</div><div class="muted small">' + sub + '</div></div>';
       el.innerHTML = PageKit.head('KPI Saya', 'Skor dihitung otomatis dari ketepatan waktu absen dan jumlah izin setiap bulan.', '<input type="month" class="input" style="width:auto" data-p value="' + esc(periode) + '">') +
-        '<div class="stack"><div class="grid g-main-r" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr)">' +
+        '<div class="stack"><div class="grid g-side g-side-2">' +
         '<div class="card" style="text-align:center"><div class="card-head" style="justify-content:center"><h3>Skor Akhir · ' + esc(fmt.periode(periode)) + '</h3></div>' + UI.ring(k.skor_akhir, 'dari 100', warna) +
         '<div class="mt"><span class="badge" style="background:' + warna + ';color:#fff">' + esc(predikat) + '</span></div>' +
         '<dl class="kv mt" style="text-align:left"><dt>Skor disiplin</dt><dd>' + fmt.num(k.skor_disiplin) + '</dd><dt>Nilai kinerja (HRD)</dt><dd>' + fmt.num(k.nilai_kinerja) + '</dd></dl>' +

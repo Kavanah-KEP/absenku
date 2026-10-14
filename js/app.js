@@ -185,7 +185,7 @@
   App.setInfo = setInfo;
   function logoHtml() {
     const i = App.state.info || {};
-    return i.logo_url ? '<img src="' + esc(i.logo_url) + '" alt="Logo" onerror="this.style.display=\'none\'">' : icon('finger');
+    return i.logo_url ? '<img src="' + esc(i.logo_url) + '" alt="Logo" data-err="hide">' : icon('finger');
   }
   App.logoHtml = logoHtml;
   async function refreshInfo() {
@@ -348,7 +348,7 @@
       if (token !== App._renderSeq) return;
       console.error(e);
       if (e.code === 'AUTH') return;
-      el.innerHTML = '<div class="card">' + UI.empty('alert', e.message || 'Gagal memuat halaman.', '<button class="btn ghost" onclick="App.route()">' + icon('refresh', 'ico-sm') + ' Coba lagi</button>') + '</div>';
+      el.innerHTML = '<div class="card">' + UI.empty('alert', e.message || 'Gagal memuat halaman.', '<button class="btn ghost" data-retry>' + icon('refresh', 'ico-sm') + ' Coba lagi</button>') + '</div>';
     }
   }
 
@@ -509,7 +509,7 @@
       const more = box.querySelector('[data-more]'); if (more) more.onclick = () => { shown += 6; draw(); };
       box.addEventListener('click', e => { const c = e.target.closest('[data-open]'); if (c && !e.target.closest('a')) App.go('#/berita/' + c.dataset.open); });
     } catch (e) {
-      box.innerHTML = '<div class="section"><div class="card">' + UI.empty('alert', e.message, '<button class="btn ghost" onclick="App.route()">Coba lagi</button>') + '</div></div>';
+      box.innerHTML = '<div class="section"><div class="card">' + UI.empty('alert', e.message, '<button class="btn ghost" data-retry>Coba lagi</button>') + '</div></div>';
     }
   }
 
@@ -626,8 +626,15 @@
     if ('requestIdleCallback' in window) requestIdleCallback(() => setTimeout(go, 1500), { timeout: 6000 }); else setTimeout(go, 3000);
   }
   // Service worker: tampilan aplikasi tersimpan di perangkat → dibuka ulang tanpa unduh
-  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
   }
+  // Pengganti handler inline (diperlukan oleh Content-Security-Policy ketat — tanpa 'unsafe-inline' untuk skrip)
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-retry]')) App.route(); });
+  document.addEventListener('error', e => {
+    const t = e.target;
+    if (!t || t.tagName !== 'IMG' || !t.dataset || !t.dataset.err) return;
+    if (t.dataset.err === 'remove') t.remove(); else t.style.display = 'none';
+  }, true);
   document.addEventListener('DOMContentLoaded', start);
 })();

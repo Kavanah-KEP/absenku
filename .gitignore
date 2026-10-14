@@ -1,0 +1,15 @@
+# ============================================================
+# PENGAMAN — berkas rahasia APK TIDAK BOLEH ikut ter-upload ke GitHub
+# (repo ini publik; kunci penandatangan yang bocor = orang lain bisa
+#  membuat APK palsu yang terlihat seperti update resmi Absenku)
+# ============================================================
+*.keystore
+*.jks
+*.apk
+*.aab
+*.idsig
+signing-key-info.txt
+signing.keystore
+*-key-info.txt
+# Paket hasil PWABuilder (simpan di luar folder ini)
+*.zip

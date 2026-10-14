@@ -7,9 +7,10 @@
    • Data dari Google Apps Script TIDAK PERNAH di-cache di sini.
    Naikkan VERSION bila ingin memaksa semua perangkat memuat ulang total.
    ============================================================ */
-const VERSION = 'absenku-v3';
+const VERSION = 'absenku-v4';
 const SHELL = [
-  './', 'index.html', 'css/style.css', 'manifest.webmanifest',
+  './', 'index.html', 'offline.html', 'css/style.css', 'manifest.webmanifest',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-192.png', 'icons/maskable-512.png', 'icons/favicon-32.png',
   'js/config.js', 'js/api.js', 'js/ui.js', 'js/app.js',
   'js/pages-karyawan.js', 'js/pages-hrd.js', 'js/pages-admin.js'
 ];
@@ -39,7 +40,12 @@ self.addEventListener('fetch', e => {
     const network = fetch(req).then(res => {
       if (res && (res.ok || res.type === 'opaque')) cache.put(key, res.clone());
       return res;
-    }).catch(() => cached);
+    }).catch(async () => {
+      if (cached) return cached;
+      // Tanpa internet & belum tersimpan → halaman offline yang rapi (bukan layar error browser)
+      if (req.mode === 'navigate') return (await cache.match('offline.html')) || Response.error();
+      return Response.error();
+    });
     return cached || network;
   }));
 });

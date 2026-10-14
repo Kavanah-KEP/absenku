@@ -230,6 +230,12 @@ Jika Anda sudah memasang versi pertama:
 
 ---
 
+## BAGIAN G — Aplikasi Android (APK)
+
+Ikuti **PANDUAN-APK.md**: membuat APK dengan PWABuilder, verifikasi `assetlinks.json` lewat repo `kavanah-kep.github.io`, memindai APK, memasang di HP, dan aturan verifikasi pengembang Android di Indonesia.
+
+---
+
 ## Troubleshooting
 
 | Gejala | Penyebab & solusi |
